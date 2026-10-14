@@ -2791,7 +2791,7 @@ body.jumping .foot {
   letter-spacing: 0.16em;
 }
 
-/* ───────────────────────── silver-white palette (?palette=silver) ───────────────────────── */
+/* ───────────────────────── silver-white palette (the default; ?palette=red for red) ───────────────────────── */
 
 .palette-silver {
   --warm: #dfe7f1;

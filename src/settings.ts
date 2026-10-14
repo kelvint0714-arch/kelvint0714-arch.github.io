@@ -4,7 +4,7 @@ export interface Settings {
   motion: boolean;
   webgl: boolean;
   hiq: boolean;
-  /** The field's colour: the red of the reference's palette, or its own silver-white (?palette=silver). */
+  /** The field's colour: the reference's own silver-white, or the red palette (?palette=red). */
   palette: Palette;
 }
 
@@ -15,7 +15,7 @@ export interface Settings {
 export function getSettings(): Settings {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const lowPower = (navigator.hardwareConcurrency ?? 8) <= 4;
-  const palette: Palette = new URLSearchParams(location.search).get('palette') === 'silver' ? 'silver' : 'red';
+  const palette: Palette = new URLSearchParams(location.search).get('palette') === 'red' ? 'red' : 'silver';
   return { motion: !reduced, webgl: true, hiq: !lowPower, palette };
 }
 

@@ -16,7 +16,7 @@ export const UNIT = 12;
 export interface SceneOptions {
   reducedMotion: boolean;
   quality: 'high' | 'low';
-  /** The field's colour after the jump: red, or the reference's own silver-white. */
+  /** The field's colour after the jump: the reference's own silver-white (the default), or red. */
   palette?: 'red' | 'silver';
   /**
    * One body per section: a planet floating `depth` Rs from the camera (the hole is D away) on the
