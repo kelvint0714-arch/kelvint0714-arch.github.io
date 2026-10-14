@@ -1,29 +1,99 @@
 # Event Horizon
 
-Kelvin Tang 的个人主页，以黑洞为主题。线上地址：https://kelvint0714-arch.github.io
+[English](#english) · [中文](#中文)
 
-- 黑洞是实时渲染的场景（[`src/blackhole.ts`](src/blackhole.ts)）：着色器逐像素积分史瓦西零测地线；吸积盘接近侧视，形成斜穿阴影的亮带和长长的层叠两翼，盘的背面经引力透镜弯到黑洞上方，合成一道圆环。几何（`LOOK`）按参考图 B 拟合；盘面的颜色由参考图反投影得到：参考图的每个像素都沿这套几何追踪到它落在盘上的位置（内盘、外盘、透镜像），颜色写进对应的盘面纹理（`public/disk-*.webp`，由 [`scripts/bake-disk.py`](scripts/bake-disk.py) 生成）。因此在参考图的取景下画面与 B 图逐像素一致（每个像素误差不超过 1 级），而盘上的物质仍沿真实轨道按开普勒速度流动（内圈快），并周期性地回到参考图的样子；参考图边框之外由程序生成的星空接续
-- 动效覆盖整个画面：盘上的光结按开普勒速度沿轨道流动（内圈快，相邻轨道的速度差把它们拉成弧），直接看到的盘面和经引力透镜弯到黑洞上下方的光环都在流动；阴影边缘随盘旋转；黑洞周围的光弧（内盘的弧线、透镜光环、盘缘外的辉光）沿参考图自身的光道绕黑洞流动——光道方向由参考图烘焙（`public/disk-lanes.webp`），内圈快、外圈也看得出在动，偶尔有光结沿弧线滑过；两极喷流不断向外射出光脉冲；盘向两侧伸出的两翼随盘转动——每个像素沿视线落到盘面上，绕自己的轨道转过一段再投回画面，近侧与远侧朝相反方向流动，正如侧看一个旋转的圆盘；溅射的星辉、放射状拖尾和喷流从黑洞向外涌出，细小的火花沿拖尾方向飞出。各层动效都以两个相差半周期的副本交叉淡化，每个周期都回到参考图本身；不同表面相接处（遮挡边缘、盘与天空之间，见 `public/disk-seams.webp`）动效渐弱，避免撕裂
-- 宽屏上黑洞铺满整页（参考图宽度约占页面的 85%），超出参考图边框的部分由镜像的参考图淡入程序星空接续。放大到超过参考图自身分辨率时，画面不只是简单插值：盘面沿各自轨道方向平滑、垂直于轨道方向锐化，消除参考图像素的锯齿；再叠加参考图分辨率以下的细密轨道纹理（按真实半径生成，随开普勒转动）；喷流与星空做轻度锐化。黑洞周围（溅射的星辉、拖尾、喷流、外侧两翼）在主页上、以及点开板块镜头推近时（参考图一个像素占屏幕十几个像素），画面沿参考图自身的光道方向（`public/disk-flow.webp`）平滑、垂直于光道锐化（不过冲），没有光道的颗粒处轻度降噪——这一步只依赖参考图，纹理载入时算一次，存成两倍分辨率；每帧再按当前缩放沿光道生成细长的丝状纹理（线积分卷积），星辉细腻而不再是放大的像素。以参考图原尺寸取景时这些全部关闭，画面仍与 B 图逐像素一致。高画质下按屏幕实际像素密度渲染（最高 2 倍）
-- 开场（约 17 秒，赛博风格的导航 HUD：四角框线、扫描线、打字输出的系统日志、遥测读数、十六进制数据流）：导航系统上线，目的地是太阳系：在导航电脑里逐键输入跃迁坐标（星系 SOL、所在旋臂、到银心的距离 8.178 kpc、离银盘的高度 +20.8 pc），校验通过后扫描目标星域，准星横扫整个屏幕、依次停在半人马座 α、巴纳德星、天狼星、TRAPPIST-1 四个候选星系上（各自显示 NO MATCH），最后滑回太阳系锁定（锁定点正是之后跃迁的消失点，一颗目标星在那里闪烁），跃迁引擎充能，进度条与 3-2-1 倒计时，点火——像被猛推一把：星点在十分之一秒内拉满成放射状长拖尾并略微过冲，画面剧震、径向动态模糊与速度线炸开，HUD 被甩动，过载读数瞬间冲到四十多 G，速度与距离读数滚动；跃迁途中引擎故障，HUD 全部转红、读数乱码、画面撕裂错位，随后红光一闪失控脱离跃迁，像急刹车：三分之一秒内甩掉九成速度，镜头向黑洞猛冲一下再回弹，画面剧震，拖尾骤然缩短、汇入黑洞，盘面、星辉与行星的转动也随之急停，再滑行片刻停稳；屏幕中央的速度读数从数万倍光速跌到亚光速；停稳后中央的抵达标题「Unknown Sector」从乱码逐字解码出来（位置未知 · 星图无匹配），停留约 3 秒后主页内容浮现；可随时跳过，网址加 `?intro` 可在同一标签页重播
-- 悬停板块时点亮所在轨道（同样经过透镜弯折）；减少动态效果时盘面静止，即参考图本身。不支持 WebGL2 时显示一张静态的红色黑洞图
-- 五个板块是五颗小行星，悬浮在相机与黑洞之间的不同深度（离相机 18–41 Rs，黑洞在 50 Rs 处）：大小按透视缩放，离得近的大、略微失焦，远的小、沉进黑洞的光晕里；被背后的吸积盘照亮，朝光一侧是白热的月牙亮边和大气光，背光面几乎全黑；跳跃到某颗星球后，它在面板右侧放大成一颗完整、清晰、缓慢自转的星球，被吸积盘从侧面照亮（有晨昏线和大气辉光），每个板块各是一种世界：About 是有海洋、大陆、极冰、云层和夜侧城市灯光的海洋行星，Research 是带发光冰裂纹的冰封世界，Projects 是带风暴斑和倾斜光环（光环投影落在星体上）的气态巨行星，Activity 是玄武岩间熔岩裂缝发光的火山世界，Contact 是水晶行星（紫水晶色的晶面各有朝向、随自转轮流闪光，晶面缝隙发光、内部有闪烁的包裹体）；星球保留自己的颜色，不被整体的红色调染红。相机随鼠标轻微平移并自行缓慢漂移、推拉，产生真实视差：近处的行星在远处的黑洞前横向滑过得更多。读数里的 r 是行星到黑洞的实际距离。标签用引线连过去，旁边给出该点按圆轨道换算的半径、速度与引力红移；点击后是一次跃迁：准星锁定目标行星、引擎充能（镜头后撤并震动，画面开始向目标流动），一瞬间冲到行星前（径向动态模糊与速度线，主页文字被甩开），白热闪光中抵达，冲击波环扩散、镜头微微过冲后稳住，板块以扫描擦入的方式出现；点击空白处返回
-- 作品板块与 GitHub 的仓库可见性保持同步：只列出公开仓库（不含 fork），仓库设为私有就消失、设为公开就出现。构建时同步一份快照（`npm run sync`，部署时每天自动刷新），访客打开作品板块时再向 GitHub 取一次当前的公开列表，有变化就立即更新（缓存 10 分钟）；提交热力图同样在构建时同步
-- 不依赖 three.js，渲染只用原生 WebGL2；帧率不足时自动降低分辨率
-- 顶部可暂停 / 继续动效；跟随系统的减少动态效果设置，暂停时仅在交互或布局变化时重绘，标签页隐藏后停止渲染
-- 顶部「观测模式」隐藏主页内容并将黑洞居中，保留暂停与返回操作；按 Esc 返回主页
-- 手机端优先展示个人介绍与研究入口；支持数字键 1–5 进入板块、左右方向键切换板块、Esc 返回，并管理进入 / 返回时的键盘焦点
+**https://kelvint0714-arch.github.io**
 
-- 全站英文。字体刻意混搭，各有分工：宽体 Syncopate 用于名字与标志，Instrument Serif 斜体用于标题与旁注，Big Shoulders Display 窄体用于数字与大字，Silkscreen 像素体用于状态标签，IBM Plex Mono 等宽体用于读数与 HUD，Space Grotesk 用于正文
+---
 
-## 修改内容
+## English
 
-个人信息、研究方向、项目说明都在 [`src/config.ts`](src/config.ts)；每个板块的文案与它的位置（`body: fromImage(x, y)`，参考图像素坐标）在 [`src/sections.ts`](src/sections.ts)；黑洞的外形参数 `LOOK` 在 [`src/blackhole.ts`](src/blackhole.ts)。开发时打开 `/compare.html` 可按参考图的取景（720×1280）渲染单帧，用于对照。
+Kelvin Tang's personal homepage, set at the edge of a black hole.
 
-研究板块（Research）是论文索引：每篇论文一行，点开是它自己的页面（地址 `#research/<slug>`，可直接分享），显示标题、作者、期刊 / 会议、年份、状态、领域、摘要与链接。在 [`src/config.ts`](src/config.ts) 的 `papers` 里按「最新在前」加条目即可（文件里有示例格式）；列表为空时只显示一个单词：Unlocked。
+### What's on the page
 
+- **A rendered black hole, not a picture.** A WebGL2 fragment shader integrates Schwarzschild null geodesics pixel by pixel through a warped accretion disk: the bright band across the shadow, the long layered wings, and the far side of the disk lensed over and under the hole into a ring. The disk is matched pixel for pixel to a reference image. Every pixel of the reference is traced to where its ray meets the disk, and its colour is baked into the disk textures (`public/disk-*.webp`, made by [`scripts/bake-disk.py`](scripts/bake-disk.py)). Past the reference's frame, a procedural sky takes over.
+- **Everything moves.** Light rides the disk's orbits at Kepler's pace (inner orbits faster), arcs stream round the hole along the reference's own light lanes, the jets fire pulses outwards, the wings turn with the disk, and the sprayed starlight streams away. Each layer keeps returning to the reference, and motion fades out where surfaces meet, so nothing tears. Drawn far larger than the reference, the picture is smoothed along its lanes and sharpened across them, with fine filaments grown along them.
+- **An intro, about 17 seconds.** A cyber nav HUD comes online. Coordinates for the Solar System are typed into the nav computer, and a scan sweeps the screen past Alpha Centauri, Barnard's Star, Sirius and TRAPPIST-1 before locking on Sol. The drive spools, counts down, and punches into hyperspace. Mid-jump the drive fails: the HUD turns red and garbled, the frame tears, and the ship slams out of hyperspace into an unknown sector, next to the black hole. Skip it with any key; it plays once per tab, and `?intro` replays it.
+- **Five sections, five planets.** They float between the camera and the hole at different depths, with real perspective and parallax as the camera sways. Choosing one is a jump: lock, spool, a burst of speed, and arrival in a white-hot flash. The planet then grows into a world of its own beside the panel:
+  - About: an ocean world
+  - Research: an ice world
+  - Projects: a ringed gas giant
+  - Activity: a volcanic world
+  - Contact: a crystal world
+- **Research** is an index of papers. Each paper has its own page at `#research/<slug>`; with none yet, the index reads *Unlocked*.
+- **Projects** follow GitHub visibility. Only public repositories are listed: one made private drops out, one made public appears. The build carries a snapshot, and opening the section asks GitHub for the current list (cached for ten minutes).
+- **Activity** shows a year of commits as a heat map, synced at build.
+- **Considerate.** It follows the system's reduced-motion setting and has its own pause button. An *Observe* mode hides the page so you can look at the hole. Keys: <kbd>1</kbd>–<kbd>5</kbd> open sections, <kbd>←</kbd> <kbd>→</kbd> switch between them, <kbd>Esc</kbd> steps back. Resolution adapts to keep the frame rate up, and without WebGL2 a still image stands in. No three.js, just WebGL2.
+- **Type as a collage**, each face with its own job:
+  - Syncopate: the name
+  - Instrument Serif italic: titles and asides
+  - Big Shoulders Display: numbers and big words
+  - Silkscreen: status tags
+  - IBM Plex Mono: readouts
+  - Space Grotesk: body text
 
-## 本地开发
+### Editing
+
+- [`src/config.ts`](src/config.ts): your profile, **your papers** (`papers`, newest first; the file has an example entry), and display names for repositories.
+- [`src/sections.ts`](src/sections.ts): the five sections, and where each planet sits (`body: fromImage(x, y)` in reference-image pixels, `depth` in Rs from the camera).
+- [`src/blackhole.ts`](src/blackhole.ts): the black hole's shape (`LOOK`) and the shader.
+
+### Local development
+
+```bash
+npm install
+npm run sync   # pull GitHub data into src/data/github.json (optional)
+npm run dev
+```
+
+Useful in development:
+
+- `?intro`: play the intro again.
+- `?still`: open straight onto the settled page.
+- `?inspect=1`: step through frames.
+- `/compare.html`: render one frame in the reference image's framing (720×1280) for comparison.
+
+### Deployment
+
+Pushing to `main` builds the site with GitHub Actions and deploys it to GitHub Pages. It also redeploys every day at 04:00 Beijing time to refresh the GitHub data.
+
+---
+
+## 中文
+
+Kelvin Tang 的个人主页，场景设在一个黑洞的边缘。
+
+### 页面上有什么
+
+- **实时渲染的黑洞，而不是一张图片。** WebGL2 片元着色器逐像素积分史瓦西零测地线，光线穿过一个扭曲的吸积盘：斜穿阴影的亮带、长长的层叠两翼，盘的背面经引力透镜弯到黑洞上下方，合成一道圆环。盘面与一张参考图逐像素对齐：参考图的每个像素都沿光线追踪到它落在盘上的位置，颜色烘焙进盘面纹理（`public/disk-*.webp`，由 [`scripts/bake-disk.py`](scripts/bake-disk.py) 生成）。参考图边框之外由程序生成的星空接续。
+- **整个画面都在动。** 光沿盘的轨道按开普勒速度流动（内圈快），黑洞周围的光弧沿参考图自身的光道绕行，两极喷流向外射出光脉冲，两翼随盘转动，溅射的星辉向外涌出。每层动效都会周期性地回到参考图本身，不同表面相接处动效渐弱，避免撕裂。放大到远超参考图分辨率时，画面沿光道平滑、垂直于光道锐化，并沿光道生成细丝纹理。
+- **约 17 秒的开场。** 赛博风格的导航 HUD 上线，在导航电脑里输入太阳系的坐标；搜索圈横扫屏幕，依次掠过半人马座 α、巴纳德星、天狼星、TRAPPIST-1，最后锁定太阳系。引擎充能、倒计时，猛然冲进超空间。途中引擎故障：HUD 转红、读数乱码、画面撕裂，随后急刹脱离跃迁，落进一片未知星域，就在黑洞旁边。按任意键可跳过；每个标签页只播一次，网址加 `?intro` 可重播。
+- **五个板块，五颗星球。** 它们悬浮在相机与黑洞之间的不同深度，有真实的透视，镜头晃动时有视差。点开一个板块就是一次跃迁：锁定、充能、急加速、在白热闪光中抵达。随后那颗星球在面板旁放大成一个独立的世界：
+  - About：海洋行星
+  - Research：冰封世界
+  - Projects：带光环的气态巨行星
+  - Activity：火山世界
+  - Contact：水晶行星
+- **Research** 是论文索引。每篇论文有自己的页面（`#research/<slug>`）；还没有论文时，列表只显示 *Unlocked*。
+- **Projects** 与 GitHub 仓库的可见性同步。只列出公开仓库：设为私有就消失，设为公开就出现。构建时带一份快照，打开板块时再向 GitHub 取一次当前列表（缓存 10 分钟）。
+- **Activity** 以热力图显示一年的提交记录，构建时同步。
+- **体贴的细节。** 跟随系统的“减少动态效果”设置，另有暂停按钮；“观测模式”隐藏页面内容，只看黑洞。按键：<kbd>1</kbd>–<kbd>5</kbd> 进入板块，<kbd>←</kbd> <kbd>→</kbd> 切换，<kbd>Esc</kbd> 返回。帧率不足时自动降低分辨率；不支持 WebGL2 时显示一张静态图。不依赖 three.js，只用原生 WebGL2。
+- **混搭的字体**，各有分工：
+  - Syncopate：名字
+  - Instrument Serif 斜体：标题与旁注
+  - Big Shoulders Display：数字与大字
+  - Silkscreen：状态标签
+  - IBM Plex Mono：读数
+  - Space Grotesk：正文
+
+### 修改内容
+
+- [`src/config.ts`](src/config.ts)：个人信息、**你的论文**（`papers`，最新在前，文件里有示例条目），以及各仓库的显示名。
+- [`src/sections.ts`](src/sections.ts)：五个板块，以及每颗星球的位置（`body: fromImage(x, y)`，参考图像素坐标；`depth`，到相机的距离，单位 Rs）。
+- [`src/blackhole.ts`](src/blackhole.ts)：黑洞的外形参数（`LOOK`）与着色器。
+
+### 本地开发
 
 ```bash
 npm install
@@ -31,6 +101,13 @@ npm run sync   # 拉取 GitHub 数据到 src/data/github.json（可选）
 npm run dev
 ```
 
-开发环境访问 `http://localhost:5173/?inspect=1` 可打开逐帧检查：切换 0 / 2 / 6 / 12 秒固定时刻，或以 1/60 秒步进；「纯画面」用于对照参考图，隐藏面板后按 I 恢复。这里的 60 FPS 表示时间步长，不代表设备的实际帧率。检查面板不会打包到发布版本。
+开发时常用：
 
-推送到 `main` 后由 GitHub Actions 构建并发布到 GitHub Pages。
+- `?intro`：重播开场。
+- `?still`：直接打开停稳后的页面。
+- `?inspect=1`：逐帧检查。
+- `/compare.html`：按参考图的取景（720×1280）渲染单帧，用于对照。
+
+### 部署
+
+推送到 `main` 后由 GitHub Actions 构建并发布到 GitHub Pages；每天北京时间 04:00 还会自动重新部署一次，刷新 GitHub 数据。
