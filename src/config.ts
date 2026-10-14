@@ -6,7 +6,7 @@ export const profile = {
   handle: 'kelvint0714-arch',
   github: 'https://github.com/kelvint0714-arch',
   /** Leave empty ('') to hide the mail button everywhere. */
-  email: 'tang.boyong@outlook.com',
+  email: 'kelvin.t0714@gmail.com',
   affiliation: 'Sichuan University',
   rank: 'Undergraduate',
   division: 'Applied Mathematics · Artificial Intelligence',
