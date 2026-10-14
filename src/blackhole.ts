@@ -1055,7 +1055,7 @@ vec3 planets(vec2 p, vec3 o, out float keep) {
       // The planet's shadow falls across the rings behind it.
       float tt = -dot(RP, L);
       float shadow = tt > 0.0 ? smoothstep(0.96, 1.04, length(RP + L * tt)) : 1.0;
-      ringC = ringTint(rho) * bright * mix(0.06, 1.0, shadow) + vec3(0.1, 0.03, 0.01);   // + the red glare
+      ringC = ringTint(rho) * bright * mix(0.06, 1.0, shadow) + mix(vec3(0.05, 0.055, 0.065), vec3(0.1, 0.03, 0.01), uRedAmt);   // + the field's glare
     }
     if (rr >= 1.0) {
       // The atmosphere, a line of light just outside the limb (wider when defocused, and when shown in full).
@@ -1107,7 +1107,7 @@ vec3 planets(vec2 p, vec3 o, out float keep) {
     float spec = pow(max(dot(reflect(-L, ns), vec3(0.0, 0.0, 1.0)), 0.0), 40.0) * shine * day;
     // Crystal faces flash: a hard, bright glint off each flat face as it swings through the light.
     if (type == 4) spec = spec * 0.4 + pow(max(dot(reflect(-L, ns), vec3(0.0, 0.0, 1.0)), 0.0), 9.0) * smoothstep(-0.2, 0.3, ndl) * 1.6 * det;
-    vec3 ambient = vec3(0.16, 0.05, 0.02) * (0.4 + 0.6 * n.z);   // the red glare all round
+    vec3 ambient = mix(vec3(0.08, 0.09, 0.11), vec3(0.16, 0.05, 0.02), uRedAmt) * (0.4 + 0.6 * n.z);   // the field's glare all round
     vec3 full = alb * (diffuse * 1.55 + ambient) + glow * mix(1.0, 1.0 - day, nightOnly) + vec3(1.0, 0.95, 0.85) * spec * 1.2;
     full += atmC * pow(1.0 - n.z, 2.5) * (0.25 + 0.75 * day) * 0.9;
     full += vec3(1.0, 0.86, 0.7) * smoothstep(0.85, 0.99, rr) * facing * 0.5;   // the backlight still catches the limb
@@ -1519,6 +1519,8 @@ export interface HoleState {
   glitch: number;
   glitchSeed: number;
   flash: number;
+  /** The silver-white palette (no red anywhere after the jump). */
+  silver?: number;
   /** Leaving hyperspace: speed still left (1 at the drop, 0 at rest). */
   exit?: number;
   /** A jump to a body: radial motion blur towards blurAt (drawing-buffer px, y up), and the arrival flash. */
@@ -1628,6 +1630,7 @@ uniform float uRed;
 uniform float uGlitch;
 uniform float uGlitchSeed;
 uniform float uFlash;
+uniform float uSilver;  // the silver-white palette: no red bleeding through the glitch, a white drop-out flash
 uniform float uBlur;    // a jump: radial motion blur towards uBlurC (drawing-buffer px), 0..1
 uniform vec2 uBlurC;
 uniform float uWhite;   // a jump's arrival: a white-hot flash
@@ -1668,7 +1671,7 @@ void main() {
     c *= 0.82 + 0.18 * step(0.5, fract(f.y / (3.0 * uPr)));
     c *= 1.0 - 0.75 * uGlitch * step(0.88, h(vec2(sd, 5.0)));
     // Flickers of the red field bleeding through.
-    bleed = uGlitch * step(0.55, h(vec2(sd, 11.0)));
+    bleed = uGlitch * step(0.55, h(vec2(sd, 11.0))) * (1.0 - uSilver);
   } else if (uBlur > 0.001) {
     // Engines at full burn: everything streams out from the point we are jumping to.
     vec2 d = uBlurC - f;
@@ -1688,7 +1691,7 @@ void main() {
   // The red palette, except where the scene marked its colour final (alpha 0: round the planets).
   float keep = 1.0 - texture(uTex, f / uRes).a;
   c = mix(c, clamp(RED * luma(c), 0.0, 1.0), max(uRed, bleed) * (1.0 - keep));
-  c += vec3(1.0, 0.24, 0.07) * uFlash;
+  c += mix(vec3(1.0, 0.24, 0.07), vec3(0.85, 0.9, 1.0), uSilver) * uFlash;
   if (uBlur > 0.001) {
     // Speed lines: thin streaks of light racing out from the point we are jumping to.
     vec2 dv = f - uBlurC;
@@ -1977,6 +1980,7 @@ export class BlackHole {
       gl.uniform1f(gl.getUniformLocation(p, 'uGlitch'), s.glitch);
       gl.uniform1f(gl.getUniformLocation(p, 'uGlitchSeed'), s.glitchSeed);
       gl.uniform1f(gl.getUniformLocation(p, 'uFlash'), s.flash);
+      gl.uniform1f(gl.getUniformLocation(p, 'uSilver'), s.silver ?? 0);
       gl.uniform1f(gl.getUniformLocation(p, 'uBlur'), s.blur ?? 0);
       gl.uniform2f(gl.getUniformLocation(p, 'uBlurC'), s.blurAt?.[0] ?? 0, s.blurAt?.[1] ?? 0);
       gl.uniform1f(gl.getUniformLocation(p, 'uWhite'), s.white ?? 0);

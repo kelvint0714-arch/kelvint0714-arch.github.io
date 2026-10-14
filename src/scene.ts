@@ -16,6 +16,8 @@ export const UNIT = 12;
 export interface SceneOptions {
   reducedMotion: boolean;
   quality: 'high' | 'low';
+  /** The field's colour after the jump: red, or the reference's own silver-white. */
+  palette?: 'red' | 'silver';
   /**
    * One body per section: a planet floating `depth` Rs from the camera (the hole is D away) on the
    * line of sight through a screen-aligned point `at` (x right, y up, Rs from the hole), `size` Rs
@@ -481,7 +483,8 @@ export class HoleScene {
     let warp = 0;
     let glitch = 0;
     let flash = 0;
-    let red = 1;
+    const silver = this.opts.palette === 'silver';
+    let red = silver ? 0 : 1;
     // The jolts of engaging and of braking: shake (px), radial motion blur, a flash.
     let jolt = 0;
     let jBlur = 0;
@@ -677,6 +680,7 @@ export class HoleScene {
       pr,
       sky: (this.cur.r / UNIT) * pr,
       red,
+      silver: silver ? 1 : 0,
       glitch,
       glitchSeed: tick % 997,
       flash,

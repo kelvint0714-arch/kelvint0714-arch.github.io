@@ -2790,3 +2790,44 @@ body.jumping .foot {
 .intro-name {
   letter-spacing: 0.16em;
 }
+
+/* ───────────────────────── silver-white palette (?palette=silver) ───────────────────────── */
+
+.palette-silver {
+  --warm: #dfe7f1;
+  --warm-2: rgba(223, 231, 241, 0.55);
+}
+.palette-silver .ia-k,
+.palette-silver .ia-d,
+.palette-silver .ia-d2,
+.palette-silver .intro.dropped .intro-k {
+  color: #c7d3e2;
+  text-shadow: 0 0 10px rgba(170, 195, 230, 0.55);
+}
+.palette-silver .ia-title {
+  color: #f5f8fc;
+  text-shadow:
+    0 0 30px rgba(170, 200, 240, 0.6),
+    -2px 0 rgba(150, 190, 255, 0.4),
+    2px 0 rgba(255, 255, 255, 0.3);
+}
+.palette-silver .ia-en,
+.palette-silver .intro.dropped .intro-name {
+  color: #d9e3f0;
+  text-shadow: 0 0 30px rgba(160, 190, 230, 0.55);
+}
+.palette-silver .intro.dropped .intro-d em,
+.palette-silver .ia-d em {
+  color: #ffffff;
+}
+.palette-silver.no-webgl #scene,
+.palette-silver.no-webgl body.observing #scene {
+  background-image: url('/hole-ref.webp');
+}
+.palette-silver .jumpfx {
+  --jf-glow: rgba(200, 215, 240, 0.55);
+}
+.palette-silver .paper-row:hover,
+.palette-silver .paper-row:focus-visible {
+  background: rgba(220, 230, 245, 0.05);
+}

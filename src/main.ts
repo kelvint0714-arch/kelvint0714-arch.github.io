@@ -17,6 +17,7 @@ const scene = settings.webgl
   ? createScene(canvas, {
       reducedMotion: !settings.motion,
       quality: settings.hiq ? 'high' : 'low',
+      palette: settings.palette,
       bodies: SECTIONS.map((s) => ({ id: s.id, at: s.body, size: s.planet, depth: s.depth })),
     })
   : null;
