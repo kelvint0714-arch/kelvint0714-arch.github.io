@@ -691,6 +691,13 @@ float awayFromSeams(vec2 p) {
   vec2 q = REF_C + vec2(p.x, -p.y) * (REF_PX / uScale);
   return smoothstep(0.0, 0.25, textureLod(uTexSeam, clamp(q, vec2(0.5), REF_SIZE - 0.5) / REF_SIZE, 0.0).r);
 }
+// The corners of the disk's wings taken out of the picture (upper left and lower right, beyond the
+// ring): there the disk is drawn as open sky, its starlight streaming outwards, no orbits shown.
+float wingCorner(vec2 p) {
+  if ((uReady & 16) == 0) return 0.0;
+  vec2 q = REF_C + vec2(p.x, -p.y) * (REF_PX / uScale);
+  return textureLod(uTexSeam, clamp(q, vec2(0.5), REF_SIZE - 0.5) / REF_SIZE, 0.0).g;
+}
 // ── Motion ───────────────────────────────────────────────────────
 // Each motion runs as two copies half a cycle apart, cross-faded so each is at rest when at full
 // weight (a flow map): things keep moving, yet never drift away from the picture for good.
@@ -1213,7 +1220,7 @@ void main() {
             // The picture, set moving by the disk's own texture once that has arrived.
             vec3 pic = screenLayer(p, vec3(0.0));
             bool moving = uFlowAmt > 0.0 && (uReady & (1 << (hitType - 2))) != 0;
-            tflow = moving ? texFlow(hitType, X, pic) * awayFromSeams(p) : vec3(0.0);
+            tflow = moving ? texFlow(hitType, X, pic) * awayFromSeams(p) * (1.0 - wingCorner(p)) : vec3(0.0);
             col = pic + highlight(X) * uReveal;
             A = 1.0;
             break;
@@ -1337,13 +1344,14 @@ void main() {
     float deep = deepZoom();
     // On the page itself (not zoomed in), the surroundings get the same lane refinement: the
     // starlight spray, the streaks, the jets and the outer wings (the body keeps its own treatment).
-    float around = hitType > 0 ? smoothstep(13.0, 19.0, gRu) : (absorbed ? 0.0 : 1.0);
+    float corner = hitType > 0 ? wingCorner(p) : 0.0;
+    float around = hitType > 0 ? max(smoothstep(13.0, 19.0, gRu), corner) : (absorbed ? 0.0 : 1.0);
     float refW = max(deep, ((uReady & 64) != 0 ? smoothstep(1.6, 3.2, uScale / REF_PX) : 0.0) * around);
     if (en > 0.0 && refW < 1.0) {
       // Which way the picture's lanes run: along the orbits on the disk (away from seams between
       // surfaces, where the radius jumps from pixel to pixel), round the hole in and around its shadow.
       // (and not where the seam map holds the disk still: its edges, and the wings' removed corners)
-      float onDisk = hitType > 0 ? (1.0 - smoothstep(8.0, 16.0, g * uScale)) * awayFromSeams(p) : 0.0;
+      float onDisk = hitType > 0 ? (1.0 - smoothstep(8.0, 16.0, g * uScale)) * awayFromSeams(p) * (1.0 - corner) : 0.0;
       float nearHole = absorbed ? 1.0 : hitType > 0 ? 1.0 - smoothstep(9.0, 12.0, gRu) : 1.0 - smoothstep(5.5, 7.0, gRu);
       float calm = max(onDisk, nearHole);
       if (calm > 0.0) {
@@ -1394,14 +1402,19 @@ void main() {
       if (wing > 0.0 && !absorbed) o += (turned - screenLayerLin(p, beyond)) * wing * mot;
       if (hitType > 0) {
         // The disk's light flows: hot clumps ride the orbits, also through the lensed ring.
-        o *= 1.0 + (clumps(hitX, hitType, hr) - 0.5) * 0.5 * mot * calmEdge * (1.0 - lane);
-      } else {
-        // Off the disk: the shadow's rim swirls with the disk; further out the sprayed starlight,
-        // the streaks and the jets stream away from the hole, sparks running out along them.
+        o *= 1.0 + (clumps(hitX, hitType, hr) - 0.5) * 0.5 * mot * calmEdge * (1.0 - lane) * (1.0 - corner);
+      }
+      // Off the disk (and in the wings' removed corners, drawn as open sky): the shadow's rim swirls
+      // with the disk; further out the sprayed starlight, the streaks and the jets stream away from
+      // the hole, sparks running out along them.
+      float sky = hitType > 0 ? corner : 1.0;
+      if (sky > 0.0) {
         float rim = absorbed ? 1.0 : 1.0 - smoothstep(5.0, 8.0, gRu);
         vec3 here = screenLayerLin(p, beyond);
-        o += (streamed(p, beyond, 0.12 * (1.0 - rim), 0.3 * SPIN_SCREEN * rim) - here) * mot * calmEdge * (1.0 - wing) * (1.0 - lane);
-        if (!absorbed) o += streaks(p) * smoothstep(0.03, 0.3, dot(here, vec3(0.3333))) * 1.8 * (1.0 - rim) * mot;
+        // (inside the corners the edge between sky and disk no longer exists: both are sky)
+        float edgeCalm = hitType > 0 ? 1.0 : max(calmEdge, wingCorner(p));
+        o += (streamed(p, beyond, 0.12 * (1.0 - rim), 0.3 * SPIN_SCREEN * rim) - here) * mot * edgeCalm * (1.0 - wing) * (1.0 - lane) * sky;
+        if (!absorbed) o += streaks(p) * smoothstep(0.03, 0.3, dot(here, vec3(0.3333))) * 1.8 * (1.0 - rim) * mot * sky;
       }
       // The jets fire knots of light outwards.
       float jm;

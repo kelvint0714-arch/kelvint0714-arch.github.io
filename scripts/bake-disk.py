@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Solve the disk textures (public/disk-*.webp) from the reference picture (public/hole-ref.webp),
-the map of edges between surfaces (public/disk-seams.webp) where motion holds still, and the
+the map of edges between surfaces where motion holds still, and of the wings' removed corners
+(public/disk-seams.webp, R and G), and the
 picture's lane field round the hole (public/disk-lanes.webp) that the arcs stream along, and its
 lane orientation everywhere (public/disk-flow.webp) for drawing it far larger than itself.
 
@@ -155,8 +156,11 @@ def main():
         edge[a] |= diff
         edge[b] |= diff
     seams = np.clip(ndimage.distance_transform_edt(~edge) / 24.0, 0, 1)
-    seams *= 1 - wing_corners(code)   # (and nothing moves or is drawn along orbits in the wing corners)
-    Image.fromarray(np.round(seams * 255).astype(np.uint8), 'L').save(
+    # G: the wing corners, where the page treats the picture as open sky (streaming outwards, no
+    # orbital detail or motion).
+    corners = wing_corners(code)
+    rgb = np.stack([np.round(seams * 255), np.round(corners * 255), np.zeros_like(seams)], -1)
+    Image.fromarray(rgb.astype(np.uint8), 'RGB').save(
         os.path.join(ROOT, 'public', 'disk-seams.webp'), lossless=True, quality=100, method=6)
 
     bake_lanes(ref, code)
