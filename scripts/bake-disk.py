@@ -64,6 +64,28 @@ def taps(x, y, W, H):
     return idx, w
 
 
+def wing_corners(code):
+    """The two corners of the disk's wings that were taken out of the picture (upper left and lower
+    right, beyond the photon ring, on open sky or the faint outer inner disk): 1 there, 0 elsewhere,
+    soft-edged. No lanes may run round the hole there, and the disk's own orbital detail and motion
+    hold still, or the page would draw the arcs back in."""
+    CX, CY = 356.0, 640.0
+    ys, xs = np.mgrid[0:code.shape[0], 0:code.shape[1]].astype(np.float64)
+    rx, ry = xs - CX, -(ys - CY)
+    th = (np.degrees(np.arctan2(ry, rx)) + 360) % 360
+    rad = np.hypot(rx, ry)
+
+    def band(a, b, w):
+        t = (th - a) % 360
+        span = (b - a) % 360
+        return np.clip(t / w, 0, 1) * np.clip((span - t) / w, 0, 1) * (t <= span)
+
+    sector = np.maximum(band(72, 203, 10), band(255, 18, 10))
+    radial = np.clip((rad - 120) / 14, 0, 1) * (1 - np.clip((rad - 230) / 30, 0, 1))   # (clear of the ring's own arcs)
+    open_ = ndimage.gaussian_filter(((code == 0) | (code == 2)).astype(np.float64), 3.0)
+    return sector * radial * open_
+
+
 def bake_lanes(ref, code):
     """The picture's light lanes round the hole (public/disk-lanes.webp): RG the lane direction (y up,
     turned to circulate counter-clockwise), B its weight (how clearly the lane runs round the hole)
@@ -86,13 +108,14 @@ def bake_lanes(ref, code):
     conc = np.abs(cr) / np.maximum(rad, 1e-6)
     w = np.clip((coh - 0.05) / 0.2, 0, 1) * np.clip((conc - 0.25) / 0.35, 0, 1) * (1 - np.clip((rad / PX - 18) / 5, 0, 1))
     w = np.clip(ndimage.gaussian_filter(w, 5.0) * 1.4, 0, 1)
+    w *= 1 - wing_corners(code)
     tux, tuy = ndimage.gaussian_filter(tux, 1.5), ndimage.gaussian_filter(tuy, 1.5)
     n = np.maximum(np.hypot(tux, tuy), 1e-6)
     rgb = np.stack([np.round((tux / n * 0.5 + 0.5) * 255), np.round((tuy / n * 0.5 + 0.5) * 255), np.round(w * 127) + (code == 3) * 128], -1)
     Image.fromarray(rgb.astype(np.uint8), 'RGB').save(os.path.join(ROOT, 'public', 'disk-lanes.webp'), lossless=True, quality=100, method=6)
 
 
-def bake_flow(ref):
+def bake_flow(ref, code):
     """The picture's lane orientation everywhere (public/disk-flow.webp, half size): RG the doubled-angle
     vector of the lane direction (image axes, y down), its length the lanes' coherence. Used to
     smooth and refine the picture along its own lanes when it is drawn much larger than itself."""
@@ -102,6 +125,15 @@ def bake_flow(ref):
     tr = np.maximum(jxx + jyy, 1e-9)
     # The gradient's doubled angle is (jxx - jyy, 2 jxy) / tr; the lanes run at right angles to it.
     d2 = np.stack([-(jxx - jyy) / tr, -2 * jxy / tr], -1)
+    # In the wing corners only lanes that run outwards (the jets, the streaks) survive: the ones
+    # running round the hole would draw the removed arcs back in.
+    CX, CY = 356.0, 640.0
+    ys, xs = np.mgrid[0:code.shape[0], 0:code.shape[1]].astype(np.float64)
+    rad = np.maximum(np.hypot(xs - CX, ys - CY), 1e-6)
+    r2 = np.stack([((xs - CX) ** 2 - (ys - CY) ** 2) / rad ** 2, 2 * (xs - CX) * (ys - CY) / rad ** 2], -1)   # radial, doubled angle
+    outward = np.clip((np.sum(d2 * r2, -1) / np.maximum(np.hypot(d2[..., 0], d2[..., 1]), 1e-6) - 0.3) / 0.5, 0, 1)
+    q = wing_corners(code)
+    d2 *= (1 - q * (1 - outward))[..., None]
     d2 = d2[::2, ::2] * 0.5 + d2[1::2, 1::2] * 0.5
     rgb = np.concatenate([np.round((d2 * 0.5 + 0.5) * 255), np.full(d2.shape[:2] + (1,), 128.0)], -1)
     Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8), 'RGB').save(os.path.join(ROOT, 'public', 'disk-flow.webp'), lossless=True, quality=100, method=6)
@@ -123,11 +155,12 @@ def main():
         edge[a] |= diff
         edge[b] |= diff
     seams = np.clip(ndimage.distance_transform_edt(~edge) / 24.0, 0, 1)
+    seams *= 1 - wing_corners(code)   # (and nothing moves or is drawn along orbits in the wing corners)
     Image.fromarray(np.round(seams * 255).astype(np.uint8), 'L').save(
         os.path.join(ROOT, 'public', 'disk-seams.webp'), lossless=True, quality=100, method=6)
 
     bake_lanes(ref, code)
-    bake_flow(ref)
+    bake_flow(ref, code)
 
     lum = ref.mean(2)
     var = np.maximum(ndimage.maximum_filter(lum, 5) - lum, lum - ndimage.minimum_filter(lum, 5))

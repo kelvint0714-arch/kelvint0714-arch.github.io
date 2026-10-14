@@ -1342,7 +1342,8 @@ void main() {
     if (en > 0.0 && refW < 1.0) {
       // Which way the picture's lanes run: along the orbits on the disk (away from seams between
       // surfaces, where the radius jumps from pixel to pixel), round the hole in and around its shadow.
-      float onDisk = hitType > 0 ? 1.0 - smoothstep(8.0, 16.0, g * uScale) : 0.0;
+      // (and not where the seam map holds the disk still: its edges, and the wings' removed corners)
+      float onDisk = hitType > 0 ? (1.0 - smoothstep(8.0, 16.0, g * uScale)) * awayFromSeams(p) : 0.0;
       float nearHole = absorbed ? 1.0 : hitType > 0 ? 1.0 - smoothstep(9.0, 12.0, gRu) : 1.0 - smoothstep(5.5, 7.0, gRu);
       float calm = max(onDisk, nearHole);
       if (calm > 0.0) {
@@ -1521,6 +1522,9 @@ export interface HoleState {
   flash: number;
   /** The silver-white palette (no red anywhere after the jump). */
   silver?: number;
+  /** The drive failing: TV static over the picture (0..1), and the screen going black (0..1). */
+  snow?: number;
+  black?: number;
   /** Leaving hyperspace: speed still left (1 at the drop, 0 at rest). */
   exit?: number;
   /** A jump to a body: radial motion blur towards blurAt (drawing-buffer px, y up), and the arrival flash. */
@@ -1631,6 +1635,8 @@ uniform float uGlitch;
 uniform float uGlitchSeed;
 uniform float uFlash;
 uniform float uSilver;  // the silver-white palette: no red bleeding through the glitch, a white drop-out flash
+uniform float uSnow;    // TV static over everything (the drive failing)
+uniform float uBlack;   // the screen gone black
 uniform float uBlur;    // a jump: radial motion blur towards uBlurC (drawing-buffer px), 0..1
 uniform vec2 uBlurC;
 uniform float uWhite;   // a jump's arrival: a white-hot flash
@@ -1705,10 +1711,25 @@ void main() {
     float line = 1.0 - smoothstep(0.25, 0.9, wpx);
     c += vec3(1.0, 0.88, 0.74) * line * seg * on * smoothstep(60.0, 220.0, rr) * uBlur * 0.9;
   }
+  // The drive failing: the picture breaks up into TV static (snow, a rolling bar, scanlines, lines
+  // slipping sideways), then the screen goes black.
+  if (uSnow > 0.001) {
+    vec2 g = f / (1.6 * uPr);
+    float row = floor(g.y);
+    g.x += (h(vec2(row * 0.37, floor(uSeed))) - 0.5) * 6.0 * step(0.86, h(vec2(row, uSeed + 2.0)));
+    float n = h(floor(g) + vec2(uSeed * 13.1, uSeed * 7.7));
+    n = mix(n, h(floor(g * 0.5) + uSeed), 0.25);
+    float yy = fract(f.y / uRes.y + uT * 0.9);
+    float bar = 1.0 - 0.45 * exp(-sq((yy - 0.5) / 0.07));
+    float lines = 0.82 + 0.18 * step(0.5, fract(f.y / (2.0 * uPr)));
+    vec3 tv = vec3(0.86, 0.88, 0.9) * (0.08 + 0.92 * n * n) * bar * lines;
+    c = mix(c, tv, uSnow);
+  }
+  c *= 1.0 - uBlack;
   // The arrival flash: white-hot at the point of arrival, a fainter wash beyond.
   if (uWhite > 0.001) {
     float d = length(f - uBlurC) / uRes.y;
-    c = mix(c, vec3(1.0, 0.95, 0.88), clamp(uWhite * (0.3 + 0.9 * exp(-sq(d / 0.32))), 0.0, 1.0));
+    c = mix(c, mix(vec3(1.0, 0.95, 0.88), vec3(0.97, 0.98, 1.0), uSilver), clamp(uWhite * (0.3 + 0.9 * exp(-sq(d / 0.32))), 0.0, 1.0));
   }
   // A whisper of grain hides banding in the dark glow.
   c += (h(f + uSeed) - 0.5) / 255.0 * uGrain;
@@ -1981,6 +2002,8 @@ export class BlackHole {
       gl.uniform1f(gl.getUniformLocation(p, 'uGlitchSeed'), s.glitchSeed);
       gl.uniform1f(gl.getUniformLocation(p, 'uFlash'), s.flash);
       gl.uniform1f(gl.getUniformLocation(p, 'uSilver'), s.silver ?? 0);
+      gl.uniform1f(gl.getUniformLocation(p, 'uSnow'), s.snow ?? 0);
+      gl.uniform1f(gl.getUniformLocation(p, 'uBlack'), s.black ?? 0);
       gl.uniform1f(gl.getUniformLocation(p, 'uBlur'), s.blur ?? 0);
       gl.uniform2f(gl.getUniformLocation(p, 'uBlurC'), s.blurAt?.[0] ?? 0, s.blurAt?.[1] ?? 0);
       gl.uniform1f(gl.getUniformLocation(p, 'uWhite'), s.white ?? 0);

@@ -100,18 +100,24 @@ export const INTRO = {
   lock: 6.05,
   spool: 6.45,
   engage: 7.45,
-  glitch: 11.45,
-  drop: 13.15,
+  /** Mid-jump the drive fails: the ship shakes harder and harder (GLITCH), the picture breaks up into
+   * TV static (STATIC), then the screen goes black (BLACK); after a beat, a sudden white light and
+   * it is through (DROP). */
+  glitch: 10.9,
+  static: 12.2,
+  black: 12.95,
+  drop: 14.2,
   /** Out of the jump it brakes hard and comes to rest at STILL; the arrival title holds, centred,
    * from NAMED until the page shows at ARRIVE. */
-  named: 14.05,
-  still: 15.75,
-  arrive: 16.95,
+  named: 15.1,
+  still: 16.8,
+  arrive: 18.0,
 };
 const ENGAGE_AT = INTRO.engage;
 const GLITCH_AT = INTRO.glitch;
+const STATIC_AT = INTRO.static;
+const BLACK_AT = INTRO.black;
 const DROP_AT = INTRO.drop;
-const SETTLE = 0.9;   // the drop's interference dying away
 const ZOOM_TIME = 1.05;
 
 /**
@@ -122,7 +128,7 @@ const ZOOM_TIME = 1.05;
 export const LAUNCH = { charge: 0.55, jump: 0.18, settle: 0.6 };
 export type LaunchPhase = 'charge' | 'jump' | 'arrive';
 
-export type JumpPhase = 'engage' | 'glitch' | 'drop';
+export type JumpPhase = 'engage' | 'glitch' | 'static' | 'black' | 'drop';
 
 export class HoleScene {
   readonly hole: BlackHole;
@@ -266,6 +272,8 @@ export class HoleScene {
   }
   private holeAt = { x: 0, y: 0 };
   private engaged = false;
+  /** The picture as the drive fails: '' fine, then 'static', then 'black'. */
+  private signal: '' | 'static' | 'black' = '';
   /** Leaving hyperspace (scene time it dropped out, or -1): everything slows from fast to still. */
   private exitT0 = -1;
   /** The clock the scene's motion runs on: the disk, the starlight, the planets' drift. It races
@@ -307,6 +315,7 @@ export class HoleScene {
     this.revealT0 = -1;
     this.glitching = false;
     this.engaged = false;
+    this.signal = '';
     this.exitT0 = -1;
     this.dropped = false;
     this.jumpT0 = this.time;
@@ -477,9 +486,9 @@ export class HoleScene {
       for (const k of ['cx', 'cy', 'r'] as const) this.cur[k] = lerp(this.cur[k], target[k], f);
     }
 
-    // Intro: a normal hyperspace jump, then the drive fails in bursts that grow longer and harder
-    // (the frame tears, the streaks stutter), then it drops out with a red flash straight into the
-    // red field, the last of the interference dying away.
+    // Intro: a normal hyperspace jump; then the drive fails: the ship shakes harder and harder, the
+    // picture breaks up into TV static and goes black; after a beat, a sudden white light, and it
+    // is through, braking hard into the field round the hole.
     let warp = 0;
     let glitch = 0;
     let flash = 0;
@@ -489,6 +498,9 @@ export class HoleScene {
     let jolt = 0;
     let jBlur = 0;
     let jWhite = 0;
+    // The drive failing: TV static over everything, then black.
+    let snow = 0;
+    let black = 0;
     const tick = Math.floor(this.time * 13);
     if (this.jumpT0 >= 0) {
       const t = this.time - this.jumpT0;
@@ -517,10 +529,27 @@ export class HoleScene {
             this.glitching = true;
             this.onJump?.('glitch');
           }
-          const k = clamp01((t - GLITCH_AT) / (DROP_AT - GLITCH_AT));
-          const burst = hash(tick) < 0.3 + 0.6 * k;
-          glitch = burst ? 0.35 + 0.65 * k : 0.1 * k;
-          if (burst) warp *= 0.5 + 0.5 * hash(tick + 0.5);
+          // The drive failing: the ship shakes harder and harder, the streaks stutter.
+          const k = clamp01((t - GLITCH_AT) / (STATIC_AT - GLITCH_AT));
+          jolt = Math.max(jolt, 5 + 30 * k * k);
+          warp *= 0.7 + 0.3 * hash(tick + 0.5);
+        }
+        if (t >= STATIC_AT && t < BLACK_AT) {
+          if (this.signal !== 'static') {
+            this.signal = 'static';
+            this.onJump?.('static');
+          }
+          // The picture breaks up into TV static.
+          snow = clamp01((t - STATIC_AT) / 0.08);
+        }
+        if (t >= BLACK_AT) {
+          if (this.signal !== 'black') {
+            this.signal = 'black';
+            this.onJump?.('black');
+          }
+          // Nothing: black, for a beat.
+          black = 1;
+          jolt = 0;
         }
       } else {
         if (!this.dropped) {
@@ -529,9 +558,9 @@ export class HoleScene {
           this.exitT0 = this.time;
           this.onJump?.('drop');
         }
+        // Out of the black, a sudden white light: through.
         const a = t - DROP_AT;
-        flash = 0.85 * Math.max(0, 1 - a / 0.4);
-        glitch = 0.6 * Math.max(0, 1 - a / SETTLE) * (hash(tick) < 0.5 ? 1 : 0.3);
+        jWhite = Math.max(jWhite, 3.2 * (a < 0.06 ? 1 : Math.exp(-(a - 0.06) / 0.3)));
         // The page shows while the scene is still slowing.
         if (t >= INTRO.arrive) {
           this.jumpT0 = -1;
@@ -681,6 +710,8 @@ export class HoleScene {
       sky: (this.cur.r / UNIT) * pr,
       red,
       silver: silver ? 1 : 0,
+      snow,
+      black,
       glitch,
       glitchSeed: tick % 997,
       flash,

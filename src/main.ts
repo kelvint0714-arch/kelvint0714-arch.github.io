@@ -659,9 +659,11 @@ async function intro(s: NonNullable<typeof scene>) {
       introEl.classList.add('glitch');
       label.textContent = '⚠ DRIVE MALFUNCTION';
     }
+    // The signal breaks up and is lost: the HUD goes with it.
+    if (p === 'static' || p === 'black') introEl.classList.add('nosignal');
     if (p === 'drop') {
       phase = 'drop';
-      introEl.classList.remove('punch');
+      introEl.classList.remove('punch', 'nosignal');
       void introEl.offsetWidth;
       introEl.classList.add('dropped', 'slam');
     }

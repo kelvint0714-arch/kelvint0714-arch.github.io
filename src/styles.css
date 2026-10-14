@@ -1661,6 +1661,14 @@ html:not(.stacked) .hud-lock.flip .hud-target::before {
     1px 0 rgba(60, 230, 255, 0.8);
 }
 
+/* The signal lost (TV static, then black): nothing of the HUD shows through. */
+.intro.nosignal .hud,
+.intro.nosignal .intro-c,
+.intro.nosignal .intro-skip {
+  opacity: 0;
+  transition: none;
+}
+
 /* The drive fails: the HUD turns red and shakes. */
 .intro.glitch {
   --hud: #ff5a3c;
@@ -2830,4 +2838,27 @@ body.jumping .foot {
 .palette-silver .paper-row:hover,
 .palette-silver .paper-row:focus-visible {
   background: rgba(220, 230, 245, 0.05);
+}
+
+/* The drive failing: the whole HUD quakes with the ship. */
+.intro.glitch:not(.dropped) .hud,
+.intro.glitch:not(.dropped) .intro-c {
+  animation: hud-quake 0.09s steps(2, end) infinite;
+}
+@keyframes hud-quake {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-9px, 5px) rotate(-0.4deg);
+  }
+  50% {
+    transform: translate(8px, -6px);
+  }
+  75% {
+    transform: translate(-5px, -4px) rotate(0.3deg);
+  }
+  100% {
+    transform: translate(6px, 3px);
+  }
 }
