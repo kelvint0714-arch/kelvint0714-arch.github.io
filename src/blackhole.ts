@@ -598,8 +598,7 @@ vec4 texLook(int typ, float r, float phi, float lod) {
 vec3 texFlow(int typ, vec3 X, vec3 pic) {
   float r = length(X);
   float phi = typ == 2 ? atan(dot(X, E2), dot(X, E1)) : atan(X.z, X.x);
-  // Enlarged, the textures' own texels would show: the flow then reads a softer level, and the
-  // finest moving detail comes from fineLanes instead.
+  // Enlarged, the textures' own texels would show: the flow then reads a softer level.
   float lod = max(texLod(), max(enlarged() * 1.5, deepZoom() * 2.5));
   vec4 here = texLook(typ, r, phi, lod);
   float trust = here.a * (1.0 - smoothstep(0.03, 0.12, abs(dot(here.rgb - pic, vec3(1.0 / 3.0)))));
@@ -650,8 +649,8 @@ vec3 screenLayerLin(vec2 p, vec3 beyond) {
   vec3 pic = textureLod(uTexScr, clamp(m, vec2(0.5), REF_SIZE - 0.5) / REF_SIZE, aroundLod()).rgb;
   return mix(beyond, pic, 1.0 - smoothstep(0.0, 90.0, o));
 }
-// Enlarged past the reference's own pixels, the picture is sharpened (unsharp mask against its
-// next mip) and the disk gains lanes finer than the reference holds, laid along the real orbits.
+// Enlarged past the reference's own pixels, the picture is sharpened a little (and round the hole,
+// in and by its shadow, smoothed along the circles its light runs on).
 vec3 pictureLin(vec2 p) {
   vec2 q = REF_C + vec2(p.x, -p.y) * (REF_PX / uScale);
   return textureLod(uTexScr, clamp(REF_SIZE - abs(REF_SIZE - abs(q)), vec2(0.5), REF_SIZE - 0.5) / REF_SIZE, 0.0).rgb;
@@ -665,24 +664,6 @@ vec3 pictureEdges(vec2 p) {
   vec2 d = vec2(0.75, -0.75) * (uScale / REF_PX);
   vec3 blur = (pictureLin(p + d.xx) + pictureLin(p + d.xy) + pictureLin(p + d.yx) + pictureLin(p + d.yy)) * 0.25;
   return pictureLin(p) - blur;
-}
-float fineLanes(vec3 X, int typ, float r, float g) {
-  // X in its disk plane, turned along its orbit (inner orbits faster).
-  vec2 h = typ == 2 ? vec2(dot(X, E1), dot(X, E2)) : X.xz;
-  float a = uTime * 0.35 * pow(max(r, 2.5) / 3.0, -1.5);
-  h = mat2(cos(a), sin(a), -sin(a), cos(a)) * h;
-  float refPx = g * uScale / REF_PX;   // Rs per reference pixel, across the lanes
-  float sum = 0.0, wsum = 0.0, f = 4.0;
-  for (int i = 0; i < 5; i++) {
-    float lam = 1.0 / f;
-    // Only wavelengths the reference cannot hold (under ~2.5 of its pixels) that the screen can (over 2.5 px).
-    float w = smoothstep(2.0, 3.5, lam / g) * (1.0 - smoothstep(1.5, 2.5, lam / refPx));
-    float warp = noise2(h * f * 0.06 + float(i) * 7.1) * 2.5;
-    sum += (noise2(vec2(r * f + warp, float(i) * 13.7)) - 0.5) * w;
-    wsum += w;
-    f *= 2.0;
-  }
-  return wsum > 0.0 ? sum / sqrt(wsum) : 0.0;
 }
 // Motion fades out near edges between surfaces (an occlusion edge, or the disk against the sky):
 // whatever rides one surface would jump there, where the picture is continuous. 0 at an edge.
@@ -1356,27 +1337,21 @@ void main() {
     // On the page itself (not zoomed in), the surroundings get the same lane refinement: the
     // starlight spray, the streaks, the jets and the outer wings (the body keeps its own treatment).
     float corner = hitType > 0 ? wingCorner(p) : 0.0;
-    float around = hitType > 0 ? 1.0 : (absorbed ? 0.0 : 1.0);
+    float around = hitType > 0 ? corner : (absorbed ? 0.0 : 1.0);
     float refW = max(deep, ((uReady & 64) != 0 ? smoothstep(1.6, 3.2, uScale / REF_PX) : 0.0) * around);
     if (en > 0.0 && refW < 1.0) {
-      // Which way the picture's lanes run: along the orbits on the disk (away from seams between
-      // surfaces, where the radius jumps from pixel to pixel), round the hole in and around its shadow.
-      // (and not where the seam map holds the disk still: its edges, and the wings' removed corners)
-      float onDisk = hitType > 0 ? (1.0 - smoothstep(8.0, 16.0, g * uScale)) * awayFromSeams(p) * (1.0 - corner) : 0.0;
-      float nearHole = absorbed ? 1.0 : hitType > 0 ? 1.0 - smoothstep(9.0, 12.0, gRu) : 1.0 - smoothstep(5.5, 7.0, gRu);
-      float calm = max(onDisk, nearHole);
+      // The disk is the picture itself, smoothly enlarged and sharpened a little: its own lanes,
+      // and the joins between the ring and the band, as silky as the reference's. In and by the
+      // shadow, the picture is smoothed along the circles its light runs on and sharpened across.
+      float calm = absorbed ? 1.0 : hitType > 0 ? 0.0 : 1.0 - smoothstep(5.5, 7.0, gRu);
       if (calm > 0.0) {
-        // Averaged along the lanes, which melts the reference's stair-steps, and sharpened across them.
         float k = uScale / REF_PX;
-        vec2 nd = gRu > 10.5 && onDisk > 0.0 ? gr / g : normalize(p + 1e-3);
+        vec2 nd = normalize(p + 1e-3);
         vec2 t = vec2(-nd.y, nd.x) * k, n = nd * k * 0.8;
         vec3 a0 = pictureAlong(p, t), a1 = pictureAlong(p + n, t), a2 = pictureAlong(p - n, t);
         vec3 crisp = max(a0 + (a0 - 0.5 * (a1 + a2)) * 0.8, 0.0);
         o += (crisp - screenLayer(p, vec3(0.0))) * en * calm * (1.0 - refW);
-        // The disk gains lanes finer than the reference holds.
-        if (onDisk > 0.0) o *= 1.0 + fineLanes(hitX, hitType, hr, g) * 0.45 * en * onDisk * (1.0 - refW);
       }
-      // The rest of the picture (jets, glow, stars) is simply sharpened.
       o += pictureEdges(p) * 0.3 * en * (1.0 - calm) * (1.0 - refW);
     }
     if (refW > 0.0) {
@@ -1390,6 +1365,7 @@ void main() {
       vec3 f0 = flowAt(q);
       float a = refW * smoothstep(0.06, 0.3, f0.z) * inFrame;
       a *= smoothstep(0.03, 0.08, max(p0.r, max(p0.g, p0.b)));   // (not in the dim sky, where they would not show)
+      a *= hitType > 0 ? max(corner, deep) : 1.0;   // (on the disk only when zoomed right in: on the page they read as wool)
       if (a > 0.0) o *= 1.0 + laneFilaments(q, uScale / REF_PX, f0.xy) * 0.075 * a;
     }
     float mot = clamp(uFlowAmt * 2.0, 0.0, 1.0);
