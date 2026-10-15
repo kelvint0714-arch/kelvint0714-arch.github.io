@@ -12,12 +12,12 @@ const scale = REF_FRAME.pxPerRs * (q.mag ?? 1);
 const at: [number, number] = q.at ?? [REF_FRAME.cx, REF_FRAME.cy];
 const pin: [number, number] = q.at ? [c.width / 2, c.height / 2] : at;
 const mag = q.mag ?? 1;
-const draw = () =>
+const draw = (time = q.time ?? 6) =>
   hole.render({
     cx: pin[0] + (REF_FRAME.cx - at[0]) * mag,
     cy: c.height - (pin[1] + (REF_FRAME.cy - at[1]) * mag),
     scale,
-    time: q.time ?? 6,
+    time,
     flow: 0.07,
     warp: 0,
     reveal: 1,
@@ -35,6 +35,8 @@ const draw = () =>
     flowAmt: q.flowAmt ?? 0,
   });
 draw();
+// For frame-by-frame motion checks: drawAt(t) renders the scene at time t.
+(window as unknown as { drawAt: (t: number) => void }).drawAt = (t) => draw(t);
 let arrived = 0;
 hole.onBaked = () => {
   draw();

@@ -238,8 +238,8 @@ uniform sampler2D uTexIn;   // baked from the reference: inner disk, outer disk 
 uniform sampler2D uTexOut;  // outer disk seen round the hole (each indexed by azimuth and radius),
 uniform sampler2D uTexLen;  // and everything else, in the reference's own framing
 uniform sampler2D uTexScr;
-uniform sampler2D uTexSeam;  // distance (in the reference) to the nearest edge between surfaces
-uniform sampler2D uTexLane;  // the reference's light lanes: direction round the hole, weight, band flag
+uniform sampler2D uTexSeam;  // distance (in the reference) to the nearest edge between surfaces; wing corners; band side
+uniform sampler2D uTexLane;  // the reference's light lanes: direction round the hole, weight
 uniform sampler2D uTexFlow;  // the reference's lane orientation everywhere (doubled angle; length = coherence)
 uniform sampler2D uNoise;    // 256² white noise, for filaments grown along the lanes
 uniform sampler2D uTexRef;   // the reference refined along its lanes, at twice its resolution (see refineFrag)
@@ -742,11 +742,14 @@ vec3 orbitFlow(vec2 u, float cr, float sr, vec3 beyond, out float w) {
 // oriented to circulate with the disk); the picture is carried along them, inner lanes faster, so
 // the arcs stream round the hole — continuously across the edges between surfaces, as the lanes
 // themselves are continuous there — with knots of light travelling on them.
-vec4 laneAt(vec2 q) {
+vec3 laneAt(vec2 q) {
   vec3 L = textureLod(uTexLane, clamp(q, vec2(0.5), REF_SIZE - 0.5) / REF_SIZE, 0.0).rgb;
-  float b = floor(L.b * 255.0 + 0.5);
-  float band = step(127.5, b);
-  return vec4(L.rg * 2.0 - 1.0, (b - band * 128.0) / 127.0, band);
+  return vec3(L.rg * 2.0 - 1.0, L.b);
+}
+// Which side of the bright band's edge, and how far: up to 1 on the band, down to -1 off it (16
+// reference px away). Baked smooth, so the edge is a clean line, not the reference pixels' staircase.
+float bandSide(vec2 q) {
+  return textureLod(uTexSeam, clamp(q, vec2(0.5), REF_SIZE - 0.5) / REF_SIZE, 0.0).b * 2.0 - 1.0;
 }
 vec2 alongLanes(vec2 q, float s) {
   for (int k = 0; k < 3; k++) {
@@ -759,27 +762,30 @@ vec3 picQ(vec2 q) { return textureLod(uTexScr, clamp(q, vec2(0.5), REF_SIZE - 0.
 float laneSpin(float r) { return 0.9 * pow(max(r, 3.0) / 4.0, -1.0); }   // radians per 5 s cycle
 vec3 laneFlow(vec2 p, out float w) {
   w = 0.0;
-  if ((uReady & 32) == 0) return vec3(0.0);
+  if ((uReady & 48) != 48) return vec3(0.0);
   vec2 q = REF_C + vec2(p.x, -p.y) * (REF_PX / uScale);
   if (any(lessThan(q, vec2(0.0))) || any(greaterThan(q, REF_SIZE))) return vec3(0.0);
-  vec4 L0 = laneAt(q);
-  w = L0.z * smoothstep(2.6, 3.4, length(p) / uScale);
+  float side = bandSide(q);
+  // No light carried across the bright band's edge (it passes in front of the ring): the streaming
+  // fades out over a few pixels either side of it, and takes no light from across it, nor from
+  // right by it, so nothing is ever cut off along it.
+  w = laneAt(q).z * smoothstep(2.6, 3.4, length(p) / uScale) * smoothstep(0.06, 0.4, abs(side));
   if (w <= 0.003) return vec3(0.0);
   float rs = max(length(q - REF_C) / REF_PX, 2.6);
   float s = laneSpin(rs) * rs * REF_PX * SPIN_SCREEN;   // ref px per cycle
   vec3 cy = cycle(5.0);
   vec3 p0 = picQ(q);
   vec2 qa = alongLanes(q, -s * cy.x), qb = alongLanes(q, -s * cy.y);
-  // No light carried across the bright band's edge (it passes in front of the ring).
-  vec3 pa = laneAt(qa).w == L0.w ? picQ(qa) : p0;
-  vec3 pb = laneAt(qb).w == L0.w ? picQ(qb) : p0;
+  float sg = sign(side);
+  vec3 pa = mix(p0, picQ(qa), smoothstep(0.06, 0.4, bandSide(qa) * sg));
+  vec3 pb = mix(p0, picQ(qb), smoothstep(0.06, 0.4, bandSide(qb) * sg));
   return mix(pb, pa, cy.z) - p0;
 }
 float laneKnots(vec2 p) {
   vec2 x = p / uScale;
   float r = length(x);
   float a = atan(x.y, x.x) - SPIN_SCREEN * laneSpin(r) / 5.0 * uTime;
-  vec3 qn = vec3(r * 2.4, cos(a) * 4.0, sin(a) * 4.0);
+  vec3 qn = vec3(r * 3.4, cos(a) * 3.4, sin(a) * 3.4);
   return noise3(qn) * 0.7 + noise3(qn * vec3(2.3, 2.0, 2.0) + 4.1) * 0.3;
 }
 
@@ -1379,8 +1385,12 @@ void main() {
       if (lane > 0.0) {
         o += laned * lane;
         // Now and then a knot of light rides an arc of the ring (only on the ring's own arcs, never
-        // over the band or into the shadow).
-        if (hitType == 2 || hitType == 4) o *= 1.0 + smoothstep(0.62, 0.9, laneKnots(p)) * 0.55 * lane * laneAgree(p, vec2(-p.y, p.x) / max(length(p), 1e-3));
+        // over the band or into the shadow). A soft glow that never burns out to white: a hard-edged
+        // white blob would read as a patch stuck on the picture.
+        if (hitType == 2 || hitType == 4) {
+          float kn = smoothstep(0.6, 0.95, laneKnots(p)) * lane * laneAgree(p, vec2(-p.y, p.x) / max(length(p), 1e-3));
+          o += o * max(1.0 - o, 0.0) * kn * 1.3;
+        }
       }
       // The wings turn with the disk.
       float wing;

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Solve the disk textures (public/disk-*.webp) from the reference picture (public/hole-ref.webp),
-the map of edges between surfaces where motion holds still, and of the wings' removed corners
-(public/disk-seams.webp, R and G), and the
+the map of edges between surfaces where motion holds still, of the wings' removed corners, and of
+the bright band's edge (public/disk-seams.webp, R, G and B), and the
 picture's lane field round the hole (public/disk-lanes.webp) that the arcs stream along, and its
 lane orientation everywhere (public/disk-flow.webp) for drawing it far larger than itself.
 
@@ -89,8 +89,8 @@ def wing_corners(code):
 
 def bake_lanes(ref, code):
     """The picture's light lanes round the hole (public/disk-lanes.webp): RG the lane direction (y up,
-    turned to circulate counter-clockwise), B its weight (how clearly the lane runs round the hole)
-    plus 128 on the bright band, where light must not be carried across."""
+    turned to circulate counter-clockwise), B its weight (how clearly the lane runs round the hole).
+    Where light must not be carried across (the bright band's edge) is in disk-seams.webp's B."""
     CX, CY, PX = 356.0, 640.0, 11.5
     lum = ndimage.gaussian_filter(ref.mean(2), 1.2)
     gx, gy = ndimage.sobel(lum, 1), ndimage.sobel(lum, 0)
@@ -112,7 +112,7 @@ def bake_lanes(ref, code):
     w *= 1 - wing_corners(code)
     tux, tuy = ndimage.gaussian_filter(tux, 1.5), ndimage.gaussian_filter(tuy, 1.5)
     n = np.maximum(np.hypot(tux, tuy), 1e-6)
-    rgb = np.stack([np.round((tux / n * 0.5 + 0.5) * 255), np.round((tuy / n * 0.5 + 0.5) * 255), np.round(w * 127) + (code == 3) * 128], -1)
+    rgb = np.stack([np.round((tux / n * 0.5 + 0.5) * 255), np.round((tuy / n * 0.5 + 0.5) * 255), np.round(w * 255)], -1)
     Image.fromarray(rgb.astype(np.uint8), 'RGB').save(os.path.join(ROOT, 'public', 'disk-lanes.webp'), lossless=True, quality=100, method=6)
 
 
@@ -159,7 +159,14 @@ def main():
     # G: the wing corners, where the page treats the picture as open sky (streaming outwards, no
     # orbital detail or motion).
     corners = wing_corners(code)
-    rgb = np.stack([np.round(seams * 255), np.round(corners * 255), np.zeros_like(seams)], -1)
+    # B: which side of the bright band's edge (the outer disk seen directly, passing in front of the
+    # ring), and how far: 0.5 on the edge, up on the band, down off it, saturated 16 px away. Smoothed,
+    # so the edge is a clean line rather than the pixels' staircase however far the page enlarges it
+    # (the lanes' light is carried up to it, never across).
+    band = code == 3
+    side = ndimage.gaussian_filter(ndimage.distance_transform_edt(band) - ndimage.distance_transform_edt(~band), 1.5)
+    side = np.clip(0.5 + side / 32.0, 0, 1)
+    rgb = np.stack([np.round(seams * 255), np.round(corners * 255), np.round(side * 255)], -1)
     Image.fromarray(rgb.astype(np.uint8), 'RGB').save(
         os.path.join(ROOT, 'public', 'disk-seams.webp'), lossless=True, quality=100, method=6)
 
