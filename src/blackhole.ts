@@ -829,6 +829,17 @@ vec3 flowAt(vec2 q) {   // xy: lane direction (picture axes, y down); z: how cle
   vec2 u2 = d2 / max(c, 1e-4);   // (cos 2θ, sin 2θ) -> (cos θ, sin θ), half-angle, no trig
   return vec3(sqrt(max(0.5 + 0.5 * u2.x, 0.0)), (u2.y < 0.0 ? -1.0 : 1.0) * sqrt(max(0.5 - 0.5 * u2.x, 0.0)), c);
 }
+// How well a screen direction runs along the picture's own lanes at p: 1 along them, 0 across.
+// (Where the lanes are not clear, anything goes.) Knots of light that ride circles or orbits keep to
+// where those agree with the lanes, so they never cut across them (as at the joins between the ring
+// and the band, where the lanes bend from one into the other).
+float laneAgree(vec2 p, vec2 dir) {
+  if ((uReady & 64) == 0) return 1.0;
+  vec2 q = REF_C + vec2(p.x, -p.y) * (REF_PX / uScale);
+  vec3 f = flowAt(q);
+  float a = abs(dot(vec2(f.x, -f.y), dir));
+  return mix(1.0, smoothstep(0.82, 0.97, a), smoothstep(0.1, 0.3, f.z));
+}
 vec3 picLin0(vec2 q) { return textureLod(uTexScr, clamp(q, vec2(0.5), REF_SIZE - 0.5) / REF_SIZE, 0.0).rgb; }
 // The refined picture (twice the reference's resolution), read with the same Catmull-Rom spline as
 // the picture itself, so replacing one by the other leaves no interpolation grid behind.
@@ -1345,7 +1356,7 @@ void main() {
     // On the page itself (not zoomed in), the surroundings get the same lane refinement: the
     // starlight spray, the streaks, the jets and the outer wings (the body keeps its own treatment).
     float corner = hitType > 0 ? wingCorner(p) : 0.0;
-    float around = hitType > 0 ? max(smoothstep(13.0, 19.0, gRu), corner) : (absorbed ? 0.0 : 1.0);
+    float around = hitType > 0 ? 1.0 : (absorbed ? 0.0 : 1.0);
     float refW = max(deep, ((uReady & 64) != 0 ? smoothstep(1.6, 3.2, uScale / REF_PX) : 0.0) * around);
     if (en > 0.0 && refW < 1.0) {
       // Which way the picture's lanes run: along the orbits on the disk (away from seams between
@@ -1393,7 +1404,7 @@ void main() {
         o += laned * lane;
         // Now and then a knot of light rides an arc of the ring (only on the ring's own arcs, never
         // over the band or into the shadow).
-        if (hitType == 2 || hitType == 4) o *= 1.0 + smoothstep(0.62, 0.9, laneKnots(p)) * 0.55 * lane;
+        if (hitType == 2 || hitType == 4) o *= 1.0 + smoothstep(0.62, 0.9, laneKnots(p)) * 0.55 * lane * laneAgree(p, vec2(-p.y, p.x) / max(length(p), 1e-3));
       }
       // The wings turn with the disk.
       float wing;
@@ -1402,7 +1413,7 @@ void main() {
       if (wing > 0.0 && !absorbed) o += (turned - screenLayerLin(p, beyond)) * wing * mot;
       if (hitType > 0) {
         // The disk's light flows: hot clumps ride the orbits, also through the lensed ring.
-        o *= 1.0 + (clumps(hitX, hitType, hr) - 0.5) * 0.5 * mot * calmEdge * (1.0 - lane) * (1.0 - corner);
+        o *= 1.0 + (clumps(hitX, hitType, hr) - 0.5) * 0.5 * mot * calmEdge * (1.0 - lane) * (1.0 - corner) * laneAgree(p, vec2(-gr.y, gr.x) / g);
       }
       // Off the disk (and in the wings' removed corners, drawn as open sky): the shadow's rim swirls
       // with the disk; further out the sprayed starlight, the streaks and the jets stream away from
