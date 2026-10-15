@@ -672,6 +672,13 @@ float awayFromSeams(vec2 p) {
   vec2 q = REF_C + vec2(p.x, -p.y) * (REF_PX / uScale);
   return smoothstep(0.0, 0.25, textureLod(uTexSeam, clamp(q, vec2(0.5), REF_SIZE - 0.5) / REF_SIZE, 0.0).r);
 }
+// The same over a wider margin (12 reference px): the sky's refinement eases out towards the disk,
+// which beside it is drawn as the plain picture, so the two meet without a seam.
+float clearOfDisk(vec2 p) {
+  if ((uReady & 16) == 0) return 1.0;
+  vec2 q = REF_C + vec2(p.x, -p.y) * (REF_PX / uScale);
+  return smoothstep(0.0, 0.5, textureLod(uTexSeam, clamp(q, vec2(0.5), REF_SIZE - 0.5) / REF_SIZE, 0.0).r);
+}
 // The corners of the disk's wings taken out of the picture (upper left and lower right, beyond the
 // ring): there the disk is drawn as open sky, its starlight streaming outwards, no orbits shown.
 float wingCorner(vec2 p) {
@@ -759,6 +766,8 @@ vec2 alongLanes(vec2 q, float s) {
   return q;
 }
 vec3 picQ(vec2 q) { return textureLod(uTexScr, clamp(q, vec2(0.5), REF_SIZE - 0.5) / REF_SIZE, motionLod()).rgb; }
+// The picture's brightness, softened over a few pixels: how bright the light round q runs.
+float laneLum(vec2 q) { return dot(textureLod(uTexScr, clamp(q, vec2(0.5), REF_SIZE - 0.5) / REF_SIZE, 2.5).rgb, vec3(1.0 / 3.0)); }
 float laneSpin(float r) { return 0.9 * pow(max(r, 3.0) / 4.0, -1.0); }   // radians per 5 s cycle
 vec3 laneFlow(vec2 p, out float w) {
   w = 0.0;
@@ -776,9 +785,14 @@ vec3 laneFlow(vec2 p, out float w) {
   vec3 cy = cycle(5.0);
   vec3 p0 = picQ(q);
   vec2 qa = alongLanes(q, -s * cy.x), qb = alongLanes(q, -s * cy.y);
-  float sg = sign(side);
-  vec3 pa = mix(p0, picQ(qa), smoothstep(0.06, 0.4, bandSide(qa) * sg));
-  vec3 pb = mix(p0, picQ(qb), smoothstep(0.06, 0.4, bandSide(qb) * sg));
+  // Light is carried along its own lane only. A sample from where the picture runs much brighter
+  // or darker lies across an edge — the ring's bright rim, seen from the dark gap beyond it where
+  // the lanes turn outwards — and would come back as a ghost arc round the hole.
+  float sg = sign(side), l0 = laneLum(q);
+  float ka = smoothstep(0.06, 0.4, bandSide(qa) * sg) * (1.0 - smoothstep(0.05, 0.14, abs(laneLum(qa) - l0)));
+  float kb = smoothstep(0.06, 0.4, bandSide(qb) * sg) * (1.0 - smoothstep(0.05, 0.14, abs(laneLum(qb) - l0)));
+  vec3 pa = mix(p0, picQ(qa), ka);
+  vec3 pb = mix(p0, picQ(qb), kb);
   return mix(pb, pa, cy.z) - p0;
 }
 float laneKnots(vec2 p) {
@@ -1343,7 +1357,7 @@ void main() {
     // On the page itself (not zoomed in), the surroundings get the same lane refinement: the
     // starlight spray, the streaks, the jets and the outer wings (the body keeps its own treatment).
     float corner = hitType > 0 ? wingCorner(p) : 0.0;
-    float around = hitType > 0 ? corner : (absorbed ? 0.0 : 1.0);
+    float around = hitType > 0 ? corner : (absorbed ? 0.0 : max(clearOfDisk(p), wingCorner(p)));
     float refW = max(deep, ((uReady & 64) != 0 ? smoothstep(1.6, 3.2, uScale / REF_PX) : 0.0) * around);
     if (en > 0.0 && refW < 1.0) {
       // The disk is the picture itself, smoothly enlarged and sharpened a little: its own lanes,
@@ -1384,11 +1398,14 @@ void main() {
       o += tflow * (1.0 - lane);
       if (lane > 0.0) {
         o += laned * lane;
-        // Now and then a knot of light rides an arc of the ring (only on the ring's own arcs, never
-        // over the band or into the shadow). A soft glow that never burns out to white: a hard-edged
-        // white blob would read as a patch stuck on the picture.
+        // Now and then a knot of light rides an arc of the ring: only on the ring's own bright arcs,
+        // never over the band, into the shadow or the dark gap round the ring (where the knots' own
+        // circles would show as a faint ring of their own). A soft glow that never burns out to
+        // white: a hard-edged white blob would read as a patch stuck on the picture.
         if (hitType == 2 || hitType == 4) {
+          vec2 q = REF_C + vec2(p.x, -p.y) * (REF_PX / uScale);
           float kn = smoothstep(0.6, 0.95, laneKnots(p)) * lane * laneAgree(p, vec2(-p.y, p.x) / max(length(p), 1e-3));
+          kn *= smoothstep(0.3, 0.5, laneLum(q));
           o += o * max(1.0 - o, 0.0) * kn * 1.3;
         }
       }
