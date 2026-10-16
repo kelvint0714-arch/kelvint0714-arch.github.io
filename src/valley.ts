@@ -63,8 +63,38 @@ const ASSEMBLY: HubAssembly[] = [
   { part: P.penrose, at: 2.3, from: [0, 0.6, 0], fade: true, dur: 1.4 },
   { part: P.bridge, at: 2.75, from: [0, 0, 0], fade: false, dur: 0.9, ry: Math.PI / 2 },
 ];
-const WALK_AT = 3.5;
-export const INTRO_END = 4.9;
+
+/** The opening, after Monument Valley's level openings (s): the sky alone and a title card; then
+ * the world turns a quarter round into its angle as the camera draws back and the clouds part,
+ * the pieces rising out of the mist as it turns; the bridge clicks across as the turn settles, the
+ * impossible triangle appears with the alignment, the five places light up one by one, the
+ * traveller steps out of her door, and the page comes in. */
+export const OPENING = {
+  title: 0.4,
+  titleOut: 3.0,
+  rise: 3.0,
+  turn: 2.6,
+  turnEnd: 8.2,
+  bridge: 7.2,
+  align: 7.9,
+  lights: 8.3,
+  walk: 8.8,
+  dawn: 8.9,
+  end: 10.4,
+};
+export const INTRO_END = OPENING.end;
+/** The quarter turn, and the pull back: how far round the world starts, how near the camera. */
+const TURN = -Math.PI / 2;
+const NEAR = 1.55;
+/** What the world turns about, and the point the camera draws back from. */
+const AXIS: V3 = [5, 0, 3];
+const FOCUS: V3 = [5, 4.5, 3];
+const easeSine = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 0.5 - 0.5 * Math.cos(Math.PI * t));
+const INTRO_ASSEMBLY: HubAssembly[] = [
+  ...ASSEMBLY.filter((a) => a.part !== P.penrose && a.part !== P.bridge).map((a) => ({ ...a, at: OPENING.rise + a.at * 1.45, dur: a.dur * 1.35 })),
+  { part: P.bridge, at: OPENING.bridge, from: [0, 0, 0], fade: false, dur: 0.9, ry: Math.PI / 2 },
+  { part: P.penrose, at: OPENING.align, from: [0, 0, 0], fade: true, dur: 0.7 },
+];
 /** Coming back to the overview the great building assembles this much faster than in the intro. */
 const RETURN_PACE = 2.4;
 /** How long each piece of a building takes to sink into the mist, and the stagger between pieces. */
@@ -212,7 +242,10 @@ export class Valley {
 
   /** The view that fits a building into its box. */
   private frameFor(def: Def): View {
-    const box = this.boxOf(def);
+    return this.fitInto(def, this.boxOf(def));
+  }
+
+  private fitInto(def: Def, box: Box): View {
     const { x0, x1, y0, y1 } = def.extent;
     // (a section's small building floats with room round it)
     const scale = Math.min(box.w / (x1 - x0), box.h / (y1 - y0)) * (def.room ? 0.86 : 1);
@@ -384,7 +417,7 @@ export class Valley {
     this.figAlpha = 0;
     this.walk = null;
     this.figPath = this.station('about')!.walk;
-    this.figShowAt = this.clock + WALK_AT;
+    this.figShowAt = this.clock + OPENING.walk;
     this.kick();
     return new Promise((res) => (this.introDone = res));
   }
@@ -395,7 +428,8 @@ export class Valley {
 
   /** Everything in place at once (a skipped intro, reduced motion, a deep link). */
   arriveNow() {
-    if (this.clock - this.stage.born < 10) this.stage.born = this.clock - 10;
+    const settled = Math.max(10, INTRO_END + 0.1);
+    if (this.clock - this.stage.born < settled) this.stage.born = this.clock - settled;
     if (this.intro) {
       const home = this.station('about')!;
       this.fig = [...home.walk[home.walk.length - 1]] as V3;
@@ -473,7 +507,8 @@ export class Valley {
     const off: V3 = own.off ? [own.off[0], own.off[1], own.off[2]] : [0, 0, 0];
     let ry = own.ry ?? 0;
     let alpha = 1;
-    const a = def.assembly.find((x) => x.part === part);
+    const list = this.intro && !def.room ? INTRO_ASSEMBLY : def.assembly;
+    const a = list.find((x) => x.part === part);
     const t = (this.clock - st.born) * st.pace;
     if (a && t < a.at + a.dur + 0.05) {
       const k = clamp01((t - a.at) / a.dur);
@@ -511,12 +546,21 @@ export class Valley {
       const { off, rx, ry, rz, alpha } = this.pose(st, i);
       const pv = st.def.pivots[i] ?? [0, 0, 0];
       const r = rotation(rx, ry, rz);
-      const t: V3 = [
+      let t: V3 = [
         pv[0] + off[0] - (r[0] * pv[0] + r[3] * pv[1] + r[6] * pv[2]),
         pv[1] + off[1] - (r[1] * pv[0] + r[4] * pv[1] + r[7] * pv[2]),
         pv[2] + off[2] - (r[2] * pv[0] + r[5] * pv[1] + r[8] * pv[2]),
       ];
-      M.set([r[0], r[1], r[2], 0, r[3], r[4], r[5], 0, r[6], r[7], r[8], 0, t[0], t[1], t[2], 1], i * 16);
+      let rr = r;
+      const yaw = st.def.room ? 0 : this.worldYaw();
+      if (yaw) {
+        // The whole world turned about its axis: W · (R, t).
+        const w = rotation(0, yaw, 0);
+        rr = mul3(w, r);
+        const d: V3 = [t[0] - AXIS[0], t[1] - AXIS[1], t[2] - AXIS[2]];
+        t = [w[0] * d[0] + w[3] * d[1] + w[6] * d[2] + AXIS[0], w[1] * d[0] + w[4] * d[1] + w[7] * d[2] + AXIS[1], w[2] * d[0] + w[5] * d[1] + w[8] * d[2] + AXIS[2]];
+      }
+      M.set([rr[0], rr[1], rr[2], 0, rr[3], rr[4], rr[5], 0, rr[6], rr[7], rr[8], 0, t[0], t[1], t[2], 1], i * 16);
       fx[i * 4] = alpha;
     }
     if (!st.def.room) {
@@ -525,6 +569,40 @@ export class Valley {
         for (const p of s.parts) fx[p * 4 + 1] = Math.max(fx[p * 4 + 1], lit);
       }
     }
+  }
+
+  /** The opening's turn of the world (0 once it has settled). */
+  private worldYaw() {
+    if (!this.intro) return 0;
+    const t = this.clock - this.stage.born;
+    return TURN * (1 - easeSine((t - OPENING.turn) / (OPENING.turnEnd - OPENING.turn)));
+  }
+
+  /** The opening's camera: near at first, drawing back as the world turns. */
+  private worldZoom() {
+    if (!this.intro) return 1;
+    const t = this.clock - this.stage.born;
+    return 1 + (NEAR - 1) * (1 - ease((t - OPENING.turn) / (OPENING.turnEnd + 0.4 - OPENING.turn)));
+  }
+
+  /** The opening's clouds: a bank over the valley at first, parting as the world turns. */
+  private openingClouds(pal: Palette): Puff[] {
+    const t = this.clock - this.stage.born;
+    const gone = clamp01((t - 2.4) / 3.4);
+    if (gone >= 1) return [];
+    const white: number[] = [1, 1, 1];
+    const color = pal.skyIn.map((c, i) => lerp(c, white[i], 0.45 - 0.3 * this.dark)) as [number, number, number];
+    const open = easeOut(clamp01((t - 0.8) / 5.0));
+    return Array.from({ length: 12 }, (_, i) => {
+      const a = (i / 12) * Math.PI * 2 + 0.4;
+      const r = 1.5 + (i % 3) * 1.1 + open * (7 + (i % 4) * 1.5);
+      return {
+        at: [AXIS[0] + Math.cos(a) * r, -1.5 + (i % 4) * 1.6 + open * 1.2, AXIS[2] + Math.sin(a) * r] as V3,
+        r: 3.2 + (i % 3) * 0.9,
+        color,
+        a: 0.7 * (1 - gone),
+      };
+    });
   }
 
   private figureMatrix() {
@@ -553,13 +631,20 @@ export class Valley {
       const pal = st.layer.pal ?? st.def.pal(dusk);
       return st.def.room.glows.map((g, i) => ({ at: g.at, r: g.r, a: (0.3 + 0.3 * dusk) * pulse(i) * on, color: pal.mats[g.mat].top }));
     }
-    const shown = this.intro ? clamp01((age - 2.6) / 1.2) : clamp01((age - 2.0) / 1.0);
-    return this.world.stations.map((s) => {
+    return this.world.stations.map((s, i) => {
       const hot = this.hotLevel.get(s.id)!;
+      let shown = clamp01((age - 2.0) / 1.0);
+      let bloom = 0;
+      if (this.intro) {
+        // In the opening the places light up one after another, each with a soft bloom.
+        const k = (age - OPENING.lights - i * 0.2) / 0.8;
+        shown = clamp01(k * 1.6);
+        bloom = Math.sin(Math.PI * clamp01(k)) * 1.4;
+      }
       return {
         at: this.lifted(s.glow, s.parts[0]),
-        r: 0.75 + 0.35 * hot,
-        a: (0.16 + 0.22 * dusk + 0.3 * hot) * pulse(s.anchor[0]) * shown * weight,
+        r: 0.75 + 0.35 * hot + 0.5 * bloom,
+        a: (0.16 + 0.22 * dusk + 0.3 * hot) * pulse(s.anchor[0]) * shown * weight * (1 + bloom),
       };
     });
   }
@@ -650,11 +735,28 @@ export class Valley {
       this.figureMatrix();
       layers.push(this.figLayer);
     }
+    let view = this.view();
+    if (this.intro) {
+      for (const p of this.openingClouds(this.skyNow ?? blend(this.dark))) puffs.push(p);
+      // While the page is away the world stands in the middle of the screen; it glides to its place
+      // as the page comes in.
+      const t = this.clock - this.stage.born;
+      const k = ease((t - OPENING.dawn + 0.5) / 1.6);
+      const mid = this.fitInto(this.hubDef, { x: this.w * 0.08, y: this.h * 0.1, w: this.w * 0.84, h: this.h * 0.84 });
+      view = {
+        origin: view.origin,
+        scale: Math.exp(lerp(Math.log(mid.scale), Math.log(view.scale), k)),
+        cx: lerp(mid.cx, view.cx, k),
+        cy: lerp(mid.cy, view.cy, k),
+      };
+      const z = this.worldZoom();
+      if (z !== 1) view = zoomAbout(view, z, project(view, FOCUS));
+    }
     this.r.draw({
       w: this.w,
       h: this.h,
       dpr: this.dpr,
-      view: this.view(),
+      view,
       pal: this.skyNow,
       layers,
       glows,
@@ -683,6 +785,13 @@ function rotation(rx: number, ry: number, rz: number): number[] {
   };
   const m = mul(mul(Ry, Rx), Rz);
   return [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]];
+}
+
+/** Column-major 3×3 product a · b. */
+function mul3(a: number[], b: number[]): number[] {
+  const o = new Array(9).fill(0);
+  for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) for (let k = 0; k < 3; k++) o[c * 3 + r] += a[k * 3 + r] * b[c * 3 + k];
+  return o;
 }
 
 /** A view zoomed by `k` about a screen point. */

@@ -473,6 +473,91 @@ button {
   transition-delay: 0.25s;
 }
 
+/* The opening's title card, centred over the empty sky, its letters coming in one by one. */
+.title-card {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 16px;
+  padding-bottom: 6vh;
+  pointer-events: none;
+  color: var(--ink);
+  text-align: center;
+  text-shadow: 0 0 24px var(--bg), 0 0 6px var(--bg);
+  transition: opacity 1.4s var(--ease), transform 1.6s var(--ease);
+}
+.tc-no {
+  font: italic 400 24px var(--serif);
+  color: var(--ink-2);
+  opacity: 0;
+  transition: opacity 1.4s var(--ease);
+}
+.tc-title {
+  display: flex;
+  font: 300 clamp(19px, 3.2vw, 42px) / 1 var(--sans);
+  letter-spacing: min(0.55em, 2.2vw);
+  padding-left: min(0.55em, 2.2vw);
+}
+.tc-title span {
+  opacity: 0;
+  transform: translateY(8px);
+  filter: blur(5px);
+  transition: opacity 1.1s var(--ease), transform 1.4s var(--ease), filter 1.4s var(--ease);
+  transition-delay: calc(var(--i) * 55ms + 300ms);
+}
+.tc-rule {
+  width: 0;
+  height: 1px;
+  margin-top: 6px;
+  background: currentColor;
+  opacity: 0.45;
+  transition: width 1.6s var(--ease) 0.9s;
+}
+.tc-sub {
+  font: italic 400 clamp(17px, 1.5vw, 21px) var(--serif);
+  color: var(--ink-2);
+  opacity: 0;
+  transition: opacity 1.4s var(--ease) 1.3s;
+}
+.intro-skip {
+  position: fixed;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  bottom: 26px;
+  margin: 0;
+  text-align: center;
+  font-size: 10.5px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.2s var(--ease);
+}
+.intro-skip.in {
+  opacity: 1;
+}
+.title-card.in .tc-no,
+.title-card.in .tc-sub {
+  opacity: 1;
+}
+.title-card.in .tc-title span {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+.title-card.in .tc-rule {
+  width: 140px;
+}
+.title-card.out {
+  opacity: 0;
+  transform: translateY(-14px);
+}
+
 /* A section open: the hub steps aside, the panel comes in. */
 [data-view='section'] .hero,
 [data-view='section'] .stations,

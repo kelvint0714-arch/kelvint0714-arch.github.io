@@ -22,7 +22,7 @@ Kelvin Tang's personal homepage: one impossible building floating in the mist, i
   - Contact: the pavilion below leads to **the Violet Tree**: a door pours a beam of light up a curved ramp, golden rings turn over it, and a tree of pink cubes breathes.
 
   The panel rises beside the building. Moving between sections, one world sinks and the next one rises; coming back, the great building assembles again.
-- **A quiet intro, about five seconds.** The building assembles itself out of the mist piece by piece. The tower rises first, the stair wing slides in, the ears push up out of the roof and the bridge swings across into place. Then the traveller walks out of her door and the page fades in. Any key or tap skips it; it plays once per tab, and `?intro` replays it.
+- **An opening, about ten seconds, after Monument Valley's.** A chapter card (*Ⅰ · A Quiet Valley*) comes in letter by letter over an empty sky, where the clouds drift. Then the world turns a quarter round into its isometric angle as the camera draws back, the clouds part and the pieces rise out of the mist. The bridge swings across and clicks in as the turn settles, and the impossible triangle appears at the moment everything lines up. The five places light up one by one, the traveller steps out of her door, the building glides aside and the page comes in. Any key or tap skips it; it plays once per tab, and `?intro` replays it.
 - **Research** is an index of papers. Each paper has its own page at `#research/<slug>`; with none yet, the index reads *Unlocked*.
 - **Projects** follow GitHub visibility. Only public repositories are listed: one made private drops out, one made public appears. The build carries a snapshot, and opening the section asks GitHub for the current list (cached for ten minutes).
 - **Activity** shows a year of commits as a heat map, synced at build.
@@ -75,7 +75,7 @@ Kelvin Tang 的个人主页：一座悬浮在雾中的不可能建筑，致敬�
   - Contact：下方的亭子，通往**紫罗兰之树**：一扇门把光束洒上弧形坡道，金色圆环在上方旋转，一棵粉色方块组成的树在轻轻呼吸。
 
   面板在建筑旁升起。在板块之间切换时，一个世界沉下、下一个升起；返回时，大建筑重新拼合。
-- **约 5 秒的安静开场。** 建筑从雾中一块一块地拼合起来：高塔先升起，阶梯翼滑入，塔顶双耳从屋顶顶出，桥旋转着咔哒一声接上。随后旅人从门里走出来，页面淡入。按任意键或轻触即可跳过；每个标签页只播一次，网址加 `?intro` 可重播。
+- **约 10 秒的开场，仿照《纪念碑谷》。** 空旷的天空里云在飘，章节卡（*Ⅰ · A Quiet Valley*）一个字母一个字母地浮现。随后整个世界旋转四分之一圈，转到等距视角，镜头同时缓缓拉远，云层散开，建筑块从雾中升起。转动停稳的一刻，桥咔哒一声接上，不可能三角在一切对齐的瞬间出现。五处地点依次亮起，旅人从门里走出，建筑滑到一旁，页面淡入。按任意键或轻触即可跳过；每个标签页只播一次，网址加 `?intro` 可重播。
 - **Research** 是论文索引。每篇论文有自己的页面（`#research/<slug>`）；还没有论文时，列表只显示 *Unlocked*。
 - **Projects** 与 GitHub 仓库的可见性同步。只列出公开仓库：设为私有就消失，设为公开就出现。构建时带一份快照，打开板块时再向 GitHub 取一次当前列表（缓存 10 分钟）。
 - **Activity** 以热力图显示一年的提交记录，构建时同步。

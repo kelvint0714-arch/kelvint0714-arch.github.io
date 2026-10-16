@@ -3,7 +3,7 @@ import { profile } from './config';
 import { emblem, esc } from './ornaments';
 import { SECTIONS, type Mounted, type Section } from './sections';
 import { applySettings, getSettings, isDark, onSystemTheme, saveTheme, type Theme } from './settings';
-import { createValley, INTRO_END, type Anchor } from './valley';
+import { createValley, OPENING, type Anchor } from './valley';
 
 const settings = getSettings();
 applySettings(settings);
@@ -390,21 +390,54 @@ function reveal() {
   document.body.classList.add('ready');
 }
 
-/** The quiet intro: the building assembles out of the mist, the traveller steps out of her door,
- * and the page fades in round it. Any key or a tap finishes it. */
+/** The opening, after Monument Valley's: a title card over an empty sky, then the world turning
+ * into its angle as it assembles out of the mist (see OPENING in src/valley.ts), the traveller
+ * stepping out, and the page coming in round it. Any key or a tap finishes it. */
 async function intro(v: NonNullable<typeof scene>) {
   app.inert = true;
   document.body.classList.add('assembling');
+  const proper = profile.name.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  const letters = (text: string) => [...text].map((ch, i) => `<span style="--i:${i}">${ch === ' ' ? '&nbsp;' : esc(ch)}</span>`).join('');
+  const card = document.createElement('div');
+  card.className = 'title-card';
+  card.setAttribute('aria-hidden', 'true');
+  card.innerHTML = `
+    <i class="tc-no">Ⅰ</i>
+    <b class="tc-title">${letters('A QUIET VALLEY')}</b>
+    <span class="tc-rule"></span>
+    <em class="tc-sub">the homepage of ${esc(proper)}</em>`;
+  const hint = document.createElement('p');
+  hint.className = 'intro-skip';
+  hint.setAttribute('aria-hidden', 'true');
+  hint.textContent = matchMedia('(pointer: coarse)').matches ? 'Tap to skip' : 'Press any key to skip';
+  document.body.append(card, hint);
   const skip = (e?: Event) => {
     if (e instanceof KeyboardEvent && (e.metaKey || e.ctrlKey || e.altKey)) return;
     v.arriveNow();
   };
   window.addEventListener('keydown', skip, { once: true });
   window.addEventListener('pointerdown', skip, { once: true });
-  // The page starts to fade in while the traveller walks out.
-  const early = setTimeout(() => document.body.classList.add('dawn'), (INTRO_END - 1.6) * 1000);
-  await v.playIntro();
-  clearTimeout(early);
+  // The card and the page follow the scene's own clock (a skip ends it at once).
+  const done = v.playIntro();
+  let raf = 0;
+  const follow = () => {
+    const t = v.introTime;
+    const over = t < 0;
+    card.classList.toggle('in', t >= OPENING.title);
+    card.classList.toggle('out', t >= OPENING.titleOut || over);
+    hint.classList.toggle('in', t >= 1.6 && t < OPENING.dawn && !over);
+    if (t >= OPENING.dawn || over) document.body.classList.add('dawn');
+    raf = requestAnimationFrame(follow);
+  };
+  follow();
+  await done;
+  cancelAnimationFrame(raf);
+  card.classList.add('out');
+  hint.classList.remove('in');
+  setTimeout(() => {
+    card.remove();
+    hint.remove();
+  }, 1400);
   window.removeEventListener('keydown', skip);
   window.removeEventListener('pointerdown', skip);
   try {
