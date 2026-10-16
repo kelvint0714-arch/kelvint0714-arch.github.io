@@ -516,7 +516,8 @@ function moonRuins(): Room {
     }
     const from = m.data.length;
     k.cupola([0, 0, 0], 1.7, M.wall, 9, 18, 0.85);
-    place(m.data, from, 0.55, 0.25, 0.4, [c[0] + 2.4, c[1] - 0.15, c[2] + 2.3]);
+    // (overturned where it fell, its crown in the ground)
+    place(m.data, from, Math.PI - 0.32, 0.12, 0.4, [c[0] + 2.5, c[1] + 1.2, c[2] + 2.3]);
     pivots[9] = c;
   }
   // 10 — high up, an aqueduct broken in two, going off into the haze
