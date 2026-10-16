@@ -147,7 +147,7 @@ uniform vec3 uLeft[${MAX_MATS}];
 uniform vec3 uRight[${MAX_MATS}];
 uniform vec4 uMatFx[${MAX_MATS}];   // x: slab seams, y: melts into the mist, z: gradient, w: unused
 uniform vec2 uMatGrad[${MAX_MATS}];
-uniform vec4 uPartFx[${MAX_PARTS}]; // x: presence (0 = still in the mist), y: lit (hovered)
+uniform vec4 uPartFx[${MAX_PARTS}]; // x: presence (0 = still in the mist), y: lit (hovered), z: haze (far off)
 uniform vec2 uFog;
 uniform vec3 uGlow;
 uniform int uPass;   // 0: whole pieces; 1, 2: pieces half there (depth first, then colour, see-through)
@@ -180,8 +180,10 @@ void main() {
   }
   // A lit part (hovered): a soft lift towards the glow.
   c = mix(c, c + uGlow * 0.12, pf.y);
-  // Low enough, it melts into the mist (the sky's colour); half there, it is see-through.
+  // Far off, it takes on the sky's colour (the air between); low enough, it melts into the mist;
+  // half there, it is see-through.
   vec3 bg = sky(cssPx());
+  c = mix(c, bg, pf.z);
   float mist = fx.y > 0.0 ? smoothstep(uFog.x, uFog.y, vW.y) : 1.0;
   outColor = vec4(mix(bg, c, mist), uPass == 0 ? 1.0 : pf.x);
 }`;

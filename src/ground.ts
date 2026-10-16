@@ -12,9 +12,18 @@ const FOOT = [[0, 0], [0.11, 0], [-0.11, 0], [0, 0.11], [0, -0.11]];
 const ABOVE = 0.4;
 const BELOW = 0.5;
 
-/** A walk's length, a straight drop on a loop counting as nothing (it is a jump, out of sight). */
+/**
+ * A jump on a loop, taking no time: a straight drop (made out of sight), or a step along the line of
+ * sight (1, 1, 1) — which on the screen is no step at all (an impossible stair's way round).
+ */
+export function isJump(a: V3, b: V3) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
+  return Math.hypot(dx, dz) < 1e-6 || (Math.abs(dx - dy) < 1e-6 && Math.abs(dy - dz) < 1e-6);
+}
+
+/** A walk's length, a jump on a loop counting as nothing. */
 export function segLen(a: V3, b: V3, loop = false) {
-  if (loop && Math.hypot(b[0] - a[0], b[2] - a[2]) < 1e-6) return 0;
+  if (loop && isJump(a, b)) return 0;
   return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
 }
 

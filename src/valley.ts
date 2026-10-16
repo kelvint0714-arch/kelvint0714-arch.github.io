@@ -5,7 +5,7 @@
 // following the system's appearance, and the quiet intro in which the great building first assembles.
 
 import type { V3 } from './geometry';
-import { along, groundTrack, heightAt, pathLength, wallBehind } from './ground';
+import { along, groundTrack, heightAt, isJump, pathLength, wallBehind } from './ground';
 import { buildFigure } from './kit';
 import { blend, roomPalette, skyMix } from './palettes';
 import { MAX_PARTS, project, Renderer, type Beam, type Glow, type Layer, type Model, type Palette, type Puff, type RGB, type View } from './renderer';
@@ -59,6 +59,7 @@ const ASSEMBLY: HubAssembly[] = [
   { part: P.penC, at: 0.3, from: [0, 0, 3], fade: true, dur: 1.1 },
   { part: P.penK, at: 1.15, from: [0, 0, 0], fade: true, dur: 0.35 },
   ...unfolding(1.3, 1),
+  ...farOff(0.6, 1),
 ];
 
 /** Everything under the triangle, unfolding from `t0` (durations times `slow`): the pillar and the
@@ -83,6 +84,11 @@ function unfolding(t0: number, slow: number): HubAssembly[] {
     { part: P.hanging, at: at(1.0), from: [0, 2.5, 0], fade: true, dur: 1.1 * slow },
     { part: P.isles, at: at(1.1), from: [0, -1.2, 0], fade: true, dur: 1.2 * slow },
   ];
+}
+
+/** The far city behind the page's words, coming up out of the haze from `t0`. */
+function farOff(t0: number, slow: number): HubAssembly[] {
+  return [P.farGate, P.farRotunda, P.farShrine, P.farIsles].map((part, i) => ({ part, at: t0 + i * 0.15 * slow, from: [0, -3, 0] as V3, fade: true, dur: 1.4 * slow }));
 }
 
 /** The opening, after Monument Valley's level openings (s): the sky alone and a title card; then
@@ -119,6 +125,7 @@ const INTRO_ASSEMBLY: HubAssembly[] = [
   { part: P.penC, at: 4.2, from: [0, 0, 7], fade: true, dur: 2.4 },
   { part: P.penK, at: OPENING.align, from: [0, 0, 0], fade: true, dur: 0.35 },
   ...unfolding(OPENING.unfold, 1.25),
+  ...farOff(OPENING.dawn - 0.4, 1),
 ];
 /** Coming back to the overview the great building assembles this much faster than in the intro. */
 const RETURN_PACE = 2.4;
@@ -141,6 +148,8 @@ interface Def {
   room: Room | null;
   /** Its triangles at rest (for the traveller's feet). */
   data: Float32Array;
+  /** Its parts off in the distance (not framed), and how hazed. */
+  distant: Record<number, number>;
   /** Its colours by day (0) or dusk (1). */
   pal: (t: number) => Palette;
   /** The great building's opening (its pieces' paths made clear, like `assembly`'s). */
@@ -235,9 +244,9 @@ export class Valley {
     this.world = buildWorld();
     this.reduced = opts.reducedMotion;
     this.dark = this.darkTo = opts.dark ? 1 : 0;
-    this.hubDef = this.define('hub', this.world.mesh, this.r.model(this.world.mesh, this.world.culledFrom), PART_COUNT, this.world.pivots, clearPaths(ASSEMBLY, this.world.solids), null);
+    this.hubDef = this.define('hub', this.world.mesh, this.r.model(this.world.mesh, this.world.culledFrom), PART_COUNT, this.world.pivots, clearPaths(ASSEMBLY, this.world.solids), null, this.world.distant);
     this.hubDef.intro = clearPaths(INTRO_ASSEMBLY, this.world.solids);
-    for (const room of buildRooms()) this.roomDefs.set(room.id, this.define(room.id, room.mesh, this.r.model(room.mesh, room.culledFrom), room.parts, room.pivots, clearPaths(room.assembly, room.solids), room));
+    for (const room of buildRooms()) this.roomDefs.set(room.id, this.define(room.id, room.mesh, this.r.model(room.mesh, room.culledFrom), room.parts, room.pivots, clearPaths(room.assembly, room.solids), room, room.distant));
     this.figLayer = { model: this.r.model(buildFigure()), parts: new Float32Array(MAX_PARTS * 16), partFx: new Float32Array(MAX_PARTS * 4) };
     this.stage = this.spawn(this.hubDef, -1000, 1);
     this.restAt(this.hubDef, this.station('about')!.walk);
@@ -264,7 +273,7 @@ export class Valley {
     resize();
   }
 
-  private define(place: string, data: Float32Array, model: Model, parts: number, pivots: V3[], assembly: HubAssembly[], room: Room | null): Def {
+  private define(place: string, data: Float32Array, model: Model, parts: number, pivots: V3[], assembly: HubAssembly[], room: Room | null, distant: Record<number, number> = {}): Def {
     // The outline: every vertex, but not what is lost in the mist below.
     const unit: View = { origin: [0, 0, 0], scale: 1, cx: 0, cy: 0 };
     const floor = room ? -Infinity : blend(0).fog[0] + 2.5;
@@ -273,7 +282,7 @@ export class Valley {
     const sp = room ? null : project(unit, this.world.spin);
     let spinR = 0;
     for (let i = 0; i < data.length; i += 8) {
-      if (data[i + 1] < floor) continue;
+      if (data[i + 1] < floor || data[i + 7] in distant) continue;
       const [px, py] = project(unit, [data[i], data[i + 1], data[i + 2]]);
       if (sp && PENROSE.includes(data[i + 7])) {
         spinR = Math.max(spinR, Math.hypot(px - sp[0], py - sp[1]));
@@ -286,7 +295,7 @@ export class Valley {
       y0 = Math.min(y0, sp[1] - spinR); y1 = Math.max(y1, sp[1] + spinR);
     }
     const pal = room ? (t: number) => roomPalette(room.id, t) : blend;
-    return { place, model, parts, pivots, assembly, extent: { x0, x1, y0, y1 }, room, data, pal };
+    return { place, model, parts, pivots, assembly, extent: { x0, x1, y0, y1 }, room, data, pal, distant };
   }
 
   private spawn(def: Def, born: number, pace: number): Stage {
@@ -570,7 +579,7 @@ export class Valley {
     p[1] = heightAt(ys, Math.min(d, total));
     this.fig = p;
     const a = path[seg], b = path[seg + 1];
-    if (Math.hypot(b[0] - a[0], b[2] - a[2]) > 0.01) this.figYaw = Math.atan2(b[0] - a[0], b[2] - a[2]);
+    if (Math.hypot(b[0] - a[0], b[2] - a[2]) > 0.01 && !isJump(a, b)) this.figYaw = Math.atan2(b[0] - a[0], b[2] - a[2]);
     if (!loop && d >= total) {
       // Some rooms she goes on walking in.
       const room = this.stage.def.room;
@@ -651,6 +660,7 @@ export class Valley {
       M.set([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], i * 16);
       fx[i * 4] = 0;
       fx[i * 4 + 1] = 0;
+      fx[i * 4 + 2] = 0;
     }
     for (let i = 0; i < st.def.parts; i++) {
       const { off, rx, ry, rz, alpha, scale, anchor } = this.pose(st, i);
@@ -685,6 +695,7 @@ export class Valley {
       }
       M.set([rr[0], rr[1], rr[2], 0, rr[3], rr[4], rr[5], 0, rr[6], rr[7], rr[8], 0, t[0], t[1], t[2], 1], i * 16);
       fx[i * 4] = alpha;
+      fx[i * 4 + 2] = st.def.distant[i] ?? 0;
     }
     if (!st.def.room) {
       for (const s of this.world.stations) {
@@ -795,7 +806,8 @@ export class Valley {
       this.veil = null;
       return [];
     }
-    const x0 = Math.min(...v.boxes.map((b) => b.x)), x1 = Math.max(...v.boxes.map((b) => b.x + b.w));
+    // (across the whole page: worlds reach behind the panel)
+    const x0 = 0, x1 = this.w;
     const y0 = Math.min(...v.boxes.map((b) => b.y)), y1 = Math.max(...v.boxes.map((b) => b.y + b.h));
     const W = x1 - x0, H = y1 - y0;
     const rpx = Math.max(80, Math.min(W, H) * 0.2);

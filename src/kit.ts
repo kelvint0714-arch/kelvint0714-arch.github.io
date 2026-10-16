@@ -267,12 +267,77 @@ export function kit(m: Mesh) {
     }
   };
   // A star's outline: `n` points, outer and inner radii, round (cx, cz).
+  /* ── round and composite forms ── */
+  // A round tower: a prism of `seg` faces (one face looking along +x, one along +z), capped.
+  const round = (c: V3, r: number, h: number, mat: number, part = 0, seg = 16) =>
+    m.lathe(c, [[0.0001, 0], [r, 0], [r, h], [0.0001, h]], seg, mat, part, -Math.PI / seg);
+  // A shape laid on face `i` of such a tower (face 0 looks along +x, face seg/4 along +z): u across
+  // the face, v up; give it centred on u = 0.
+  const onFace = (c: V3, r: number, seg: number, i: number, y: number, shape: [number, number][], mat: number, part = 0) => {
+    const a = (i / seg) * Math.PI * 2;
+    const R = r * Math.cos(Math.PI / seg) + 0.003;
+    m.decal([c[0] + R * Math.cos(a), y, c[2] + R * Math.sin(a)], [Math.sin(a), 0, -Math.cos(a)], [0, 1, 0], shape, mat, part);
+  };
+  // An arched opening centred on u = 0 (for onFace).
+  const archAt = (w: number, h: number): [number, number][] => archShape(-w / 2, 0, w, h);
+  // A cone (a roof), and a round dome (half a sphere), each on a disc at c.
+  const cone = (c: V3, r: number, h: number, mat: number, part = 0, seg = 16) =>
+    m.lathe(c, [[0.0001, 0], [r, 0], [0.0001, h]], seg, mat, part, -Math.PI / seg);
+  const cupola = (c: V3, r: number, mat: number, part = 0, seg = 16, squash = 1) => {
+    const prof: [number, number][] = [[0.0001, 0], [r, 0]];
+    for (let i = 1; i <= 6; i++) {
+      const a = (i / 6) * (Math.PI / 2);
+      prof.push([Math.max(0.0001, r * Math.cos(a)), r * squash * Math.sin(a)]);
+    }
+    m.lathe(c, prof, seg, mat, part, -Math.PI / seg);
+  };
+  // A ring of stone round the vertical through c, from radius r0 out to r1, h0 up to h1.
+  const ring = (c: V3, r0: number, r1: number, h0: number, h1: number, mat: number, part = 0, seg = 24) =>
+    m.lathe(c, [[r1, h0], [r1, h1], [r0, h1], [r0, h0], [r1, h0]], seg, mat, part, -Math.PI / seg);
+  // A rotunda: a round step, a ring of columns, a ring beam on them, and a dome.
+  const rotunda = (c: V3, R: number, h: number, n: number, part = 0, opts: { dome?: boolean; broken?: number[] } = {}) => {
+    m.lathe(c, [[0.0001, 0], [R + 0.45, 0], [R + 0.45, 0.25], [R + 0.25, 0.25], [R + 0.25, 0.45], [0.0001, 0.45]], 24, M.trim, part);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.PI / n;
+      const hh = opts.broken?.[i] ?? h;
+      m.lathe([c[0] + R * Math.cos(a), c[1] + 0.45, c[2] + R * Math.sin(a)], [[0.0001, 0], [0.2, 0], [0.17, hh], [0.0001, hh]], 8, M.wall, part);
+    }
+    if (!opts.broken) {
+      ring([c[0], c[1] + 0.45 + h, c[2]], R - 0.35, R + 0.35, 0, 0.5, M.trim, part);
+      if (opts.dome !== false) {
+        cupola([c[0], c[1] + 0.95 + h, c[2]], R + 0.15, M.dome, part, 20, 0.85);
+        finial([c[0], c[1] + 0.95 + h + (R + 0.15) * 0.85, c[2]], 0.7, part, M.dome);
+      }
+    }
+  };
+  // An arched bridge along x (or z), from u0 to u1, its deck at `top`, between w0 and w1 across: its
+  // ends drop `end` as abutments, its belly arching up to `deck` under the top.
+  const bridge = (axis: 'x' | 'z', u0: number, u1: number, w0: number, w1: number, top: number, end: number, deck: number, mat: number, part = 0) => {
+    const pts: [number, number][] = [[u0, top - end]];
+    for (let i = 1; i < 24; i++) {
+      const u = u0 + ((u1 - u0) * i) / 24;
+      pts.push([u, top - end + (end - deck) * Math.sin((Math.PI * i) / 24)]);
+    }
+    pts.push([u1, top - end], [u1, top], [u0, top]);
+    if (axis === 'x') m.extrude(pts, 'xy', w0, w1, mat, part, true);
+    else m.extrude(pts, 'zy', w0, w1, mat, part, true);
+  };
+  // A stair winding round the vertical through c: n steps from angle a0, each da further round and
+  // `rise` higher, between radii r0 and r1.
+  const spiral = (c: V3, r0: number, r1: number, a0: number, da: number, n: number, rise: number, mat: number, part = 0, thick = 0.3) => {
+    for (let i = 0; i < n; i++) {
+      const a = a0 + (i + 0.5) * da;
+      const rc = (r0 + r1) / 2;
+      const len = Math.abs(da) * r1 * 1.08;
+      tipped([c[0] + rc * Math.cos(a), c[1] + (i + 1) * rise - thick / 2, c[2] + rc * Math.sin(a)], [r1 - r0, thick, len], 0, 0, -a, mat, part);
+    }
+  };
   const star = (cx: number, cz: number, n: number, r0: number, r1: number, turn = 0): [number, number][] =>
     Array.from({ length: n * 2 }, (_, i) => {
       const a = turn + (i / (n * 2)) * Math.PI * 2, r = i % 2 ? r1 : r0;
       return [cx + r * Math.cos(a), cz + r * Math.sin(a)] as [number, number];
     });
-  return { doorZ, doorX, slitZ, slitX, friezeZ, friezeX, crenels, dome, keel, island, wheel, runeRing, torus, tipped, rock, pagoda, onionZ, frame, vines, band, cornice, windowZ, windowX, inlayZ, inlayX, finial, lantern, parapet, bannerZ, slab, star };
+  return { doorZ, doorX, slitZ, slitX, friezeZ, friezeX, crenels, dome, keel, island, wheel, runeRing, torus, tipped, rock, pagoda, onionZ, frame, vines, band, cornice, windowZ, windowX, inlayZ, inlayX, finial, lantern, parapet, bannerZ, slab, star, round, onFace, archAt, cone, cupola, ring, rotunda, bridge, spiral };
 }
 
 function faceN(a: V3, b: V3, c: V3): V3 {
@@ -324,4 +389,25 @@ export function buildFigure(): Float32Array {
   place(m.data, from, -1.1, 0, 0, [0, 0.46, -0.01]);
   for (let i = 0; i < m.data.length; i += 8) for (let k = 0; k < 3; k++) m.data[i + k] *= FIGURE_SCALE;
   return new Float32Array(m.data);
+}
+
+/** The world point at height `y` seen at (sx, sy) on the screen (world units from the origin, y down):
+ * for placing what stands off in the distance, across the page. */
+export function seen(sx: number, sy: number, y: number): V3 {
+  const a = sx * Math.SQRT2, b = sy * Math.sqrt(6) + 2 * y;
+  return [(a + b) / 2, y, (b - a) / 2];
+}
+
+/** A floating island: a broken-edged slab of floor, on a rough cone of rock going down into the mist. */
+export function islet(m: Mesh, c: V3, r: number, part: number, seed: number, top: number = M.floor) {
+  const k = kit(m);
+  let s = seed * 9301 + 49297;
+  const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+  const edge: [number, number][] = Array.from({ length: 14 }, (_, i) => {
+    const a = (i / 14) * Math.PI * 2;
+    const rr = r * (0.86 + 0.2 * rnd());
+    return [c[0] + rr * Math.cos(a), c[2] + rr * Math.sin(a)];
+  });
+  k.slab(edge, c[1] - 0.6, c[1], M.stone, part, top);
+  m.lathe([c[0], c[1] - 0.6, c[2]], [[r * 0.88, 0], [r * 0.55, -1.6], [r * 0.25, -3.6], [0.0001, -5.2]], 9, M.stone, part, seed);
 }

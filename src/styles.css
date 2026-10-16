@@ -16,7 +16,7 @@
   --accent: #a46f45;
   --accent-soft: rgba(164, 111, 69, 0.12);
   --glow: #fff1c9;
-  --panel: rgba(250, 246, 238, 0.8);
+  --panel: rgba(250, 246, 238, 0.6);
   --panel-edge: rgba(255, 255, 255, 0.7);
   --shadow: 0 40px 90px -50px rgba(90, 64, 40, 0.45);
   --solid-ink: #f7f1e6;
@@ -38,7 +38,7 @@
   --accent: #8ff2ff;
   --accent-soft: rgba(143, 242, 255, 0.1);
   --glow: #8ff2ff;
-  --panel: rgba(22, 32, 37, 0.74);
+  --panel: rgba(22, 32, 37, 0.58);
   --panel-edge: rgba(160, 220, 230, 0.13);
   --shadow: 0 40px 100px -40px rgba(0, 0, 0, 0.7);
   --solid-ink: #12191d;
@@ -617,8 +617,8 @@ button {
   border: 1px solid var(--panel-edge);
   border-radius: 4px;
   box-shadow: var(--shadow);
-  -webkit-backdrop-filter: blur(16px) saturate(1.1);
-  backdrop-filter: blur(16px) saturate(1.1);
+  -webkit-backdrop-filter: blur(7px) saturate(1.1);
+  backdrop-filter: blur(7px) saturate(1.1);
   pointer-events: auto;
   opacity: 0;
   transform: translateY(14px);

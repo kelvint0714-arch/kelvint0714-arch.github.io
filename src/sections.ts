@@ -230,7 +230,7 @@ const research: Section = {
   title: 'Research',
   en: 'Papers',
   place: 'the rune on the tall tower',
-  building: 'The Night Window',
+  building: 'The Moonlit Ruins',
   render: () => `
     <div class="papers" data-view="list">
       <ol class="paper-list">${papers.length ? papers.map(paperRow).join('') : emptyRow}</ol>
@@ -365,7 +365,7 @@ const activity: Section = {
   title: 'Activity',
   en: 'Commit log',
   place: 'the crank beside the stair',
-  building: 'The Endless Stair',
+  building: 'The Penrose Stair',
   render: () => {
     const s = activityStats();
     const max = Math.max(1, ...s.days.map((d) => d[1]));

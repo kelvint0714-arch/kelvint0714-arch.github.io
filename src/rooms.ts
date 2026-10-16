@@ -3,13 +3,15 @@
 // great building, which sinks into the mist; this one assembles out of it and she steps out of its
 // door.
 //   About     — the Lotus Palace: pagoda towers, a pool with a lotus, rooms cut open in the walls
-//   Research  — the Night Window: a white frame of onion arches looking onto a starry night
+//   Research  — the Moonlit Ruins: an arcade broken off in steps, a window still full of night, a
+//               stair into the sky, stones stopped in the air as they fell
 //   Projects  — the Amber Sky: an impossible triangle for a tower, a crow on a floating ledge, clouds
-//   Activity  — the Endless Stair: a stair round a dark tower that climbs for ever, on rocks in a pond
+//   Activity  — the Penrose Stair: a ring of stairs that climbs for ever, and stairs in other
+//               gravities — along a wall, up a wall, under a ceiling
 //   Contact   — the Violet Tree: a door pouring light up a curved ramp, a tree of pink cubes
 
 import { Mesh, archShape, rect, type Solid, type V3 } from './geometry';
-import { kit, M } from './kit';
+import { islet, kit, M, place, seen } from './kit';
 import type { Beam, Palette, Puff, RGB } from './renderer';
 
 export interface Assembly {
@@ -44,6 +46,9 @@ export interface Room {
   speed?: number;
   /** Lights: where, how big, and in which material's colour. */
   glows: { at: V3; r: number; mat: number }[];
+  /** Parts standing off in the distance — across the page, behind the panel: left out of the framing
+   * (the building itself is framed beside the panel) and hazed by the air (0…1). */
+  distant?: Record<number, number>;
   /** Its own motion: `since` is how long ago it was entered, `t` the scene's clock. */
   pose: (part: number, since: number, t: number) => Pose;
   beams?: (pal: Palette, since: number, t: number) => Beam[];
@@ -80,6 +85,7 @@ function lotusPalace(): Room {
   const m = new Mesh();
   const k = kit(m);
   const pivots: V3[] = [];
+  let lighthouse: V3 = [0, 0, 0];
   const B = 4.2;            // half its side
   const D = 12;             // down into the mist
   const R = 1.15;           // how deep the rooms are cut into its walls
@@ -177,25 +183,24 @@ function lotusPalace(): Room {
   }
   m.lathe([lc[0], lc[1] + 0.22, lc[2]], [[0.0001, 0], [0.12, 0.06], [0.0001, 0.15]], 8, M.gold, 3);
   pivots[3] = lc;
-  // 4 — the left tower, 5 — the right one: tall, pagoda-roofed, a door each onto the high walk
+  // 4 — the left tower, 5 — the right one: round, ringed, a door each onto the high walk; 6, 7 —
+  // their tall conical roofs
   const TW = 1.9, TT = 9.4, WY = 4.6;
   const tower = (x0: number, z0: number, part: number, door: 'x' | 'z') => {
-    m.box([x0, 0.32, z0], [x0 + TW, TT, z0 + TW], M.wall, part);
-    k.band(x0, z0, x0 + TW, z0 + TW, WY - 0.12, 0.12, part, 0.05, M.trim);
-    k.band(x0, z0, x0 + TW, z0 + TW, TT - 1.6, 0.1, part, 0.05, M.trim);
-    k.cornice(x0, z0, x0 + TW, z0 + TW, TT, part, 0.14, M.trim);
-    k.onionZ(x0 + 0.62, 1.5, z0 + TW, 0.66, 1.5, M.hole, part);
-    m.decal([x0 + TW + 0.004, 1.5, z0 + TW - 0.62], [0, 0, -1], [0, 1, 0], archShape(0, 0, 0.66, 1.5), M.hole, part);
-    if (door === 'x') k.doorX(x0 + TW, WY, z0 + 1.35, 0.85, 1.5, M.wood, part);
-    else k.doorZ(x0 + 0.5, WY, z0 + TW, 0.85, 1.5, M.wood, part);
-    k.slitZ(x0 + 0.8, TT - 1.2, z0 + TW, 0.3, 0.55, part, M.accent);
-    k.slitX(x0 + TW, TT - 1.2, z0 + 1.1, 0.3, 0.55, part, M.accent);
-    for (const y of [WY + 2.2]) {
-      k.windowZ(x0 + 0.73, y, z0 + TW, 0.44, 0.9, part, M.hole);
-      k.windowX(x0 + TW, y, z0 + 1.17, 0.44, 0.9, part, M.hole);
-    }
-    k.pagoda([x0 + TW / 2, TT + 0.3, z0 + TW / 2], 1.35, part === 4 ? 6 : 7);
-    k.finial([x0 + TW / 2, TT + 0.3 + 2.4, z0 + TW / 2], 0.5, part === 4 ? 6 : 7, M.roof);
+    const c: V3 = [x0 + TW / 2, 0.32, z0 + TW / 2];
+    const r = TW / 2 + 0.05;
+    k.round(c, r, TT - 0.32, M.wall, part);
+    k.ring([c[0], WY - 0.12, c[2]], r - 0.2, r + 0.06, 0, 0.12, M.trim, part);
+    k.ring([c[0], TT - 1.6, c[2]], r - 0.2, r + 0.06, 0, 0.1, M.trim, part);
+    k.ring([c[0], TT, c[2]], r - 0.3, r + 0.3, 0, 0.2, M.trim, part);
+    for (const i of [1, 3]) k.onFace(c, r, 16, i, 1.5, k.archAt(0.62, 1.5), M.hole, part);
+    k.onFace(c, r, 16, door === 'x' ? 15 : 5, WY, k.archAt(0.82, 1.5), M.wood, part);
+    for (const i of [1, 3]) k.onFace(c, r, 16, i, WY + 2.2, k.archAt(0.42, 0.9), M.hole, part);
+    for (const i of [0, 2, 4]) k.onFace(c, r, 16, i, TT - 1.2, rect(-0.14, 0, 0.28, 0.55), M.accent, part);
+    const roof = part === 4 ? 6 : 7;
+    k.cone([c[0], TT + 0.2, c[2]], r + 0.5, 2.9, M.roof, roof);
+    k.ring([c[0], TT + 0.2, c[2]], r - 0.1, r + 0.55, 0, 0.12, M.roof, roof);
+    k.finial([c[0], TT + 3.0, c[2]], 0.5, roof, M.gold);
   };
   tower(-B, B - TW, 4, 'x');
   pivots[4] = [-B + TW / 2, 0, B - TW / 2];
@@ -206,8 +211,8 @@ function lotusPalace(): Room {
   // 8 — the high walk round the front of the pool, from tower door to tower door, on slender legs
   {
     const a0 = 2.05, a1 = 3.5;
-    m.box([-B + TW, WY - 0.42, a0], [a1, WY, a1], M.floor, 8);
-    m.box([a0, WY - 0.42, -B + TW], [a1, WY, a0], M.floor, 8);
+    m.box([-B + TW - 0.25, WY - 0.42, a0], [a1, WY, a1], M.floor, 8);
+    m.box([a0, WY - 0.42, -B + TW - 0.25], [a1, WY, a0], M.floor, 8);
     m.box([-B + TW, WY, a1 - 0.14], [a1, WY + 0.3, a1], M.trim, 8);
     m.box([a1 - 0.14, WY, -B + TW], [a1, WY + 0.3, a1 - 0.14], M.trim, 8);
     for (const [x, z] of [[a1 - 0.3, a1 - 0.3], [0, a1 - 0.3], [a1 - 0.3, 0]]) m.box([x - 0.13, 0.32, z - 0.13], [x + 0.13, WY - 0.42, z + 0.13], M.wall, 8);
@@ -229,12 +234,64 @@ function lotusPalace(): Room {
     k.keel([c[0], c[1], c[2]], 0.9, 1.6, 10);
     pivots[10] = c;
   }
+  // Off across the page: 11 — a colonnaded gallery on an arched bridge, out from the floating block
+  // to 12 — a domed rotunda on an island; 13 — a slender lighthouse tower; 14 — a lotus pond on its
+  // own island, with two little domed pavilions; 15 — blocks with rings, drifting
+  {
+    const gx0 = -8.1, gx1 = -6.7, gz0 = 4.6, gz1 = 10.4, gy = 1.2;
+    m.box([gx0, gy - 0.4, gz0], [gx1, gy, gz1], M.floor, 11);
+    k.bridge('z', gz0, gz1, gx0 + 0.1, gx1 - 0.1, gy - 0.4, 4.4, 0.5, M.stone, 11);
+    for (let i = 0; i < 6; i++) {
+      for (const x of [gx0 + 0.15, gx1 - 0.15]) m.lathe([x, gy, gz0 + 0.35 + i * 1.02], [[0.0001, 0], [0.13, 0], [0.11, 1.7], [0.0001, 1.7]], 8, M.wall, 11);
+    }
+    m.box([gx0 - 0.15, gy + 1.7, gz0 - 0.1], [gx1 + 0.15, gy + 1.95, gz1 + 0.1], M.trim, 11);
+    m.box([gx0 - 0.05, gy + 1.95, gz0], [gx1 + 0.05, gy + 2.15, gz1], M.roof, 11);
+    pivots[11] = [(gx0 + gx1) / 2, gy, (gz0 + gz1) / 2];
+    const rc: V3 = [(gx0 + gx1) / 2, gy - 0.4, gz1 + 3.0];
+    islet(m, rc, 3.0, 12, 5);
+    k.rotunda(rc, 1.7, 2.7, 8, 12);
+    pivots[12] = rc;
+  }
+  {
+    const c = seen(-20.5, -1.2, -2.6);
+    islet(m, c, 2.2, 13, 2);
+    k.round(c, 0.85, 12.4, M.wall, 13);
+    for (const y of [3.6, 7.4]) k.ring([c[0], c[1] + y, c[2]], 0.6, 0.92, 0, 0.12, M.trim, 13);
+    k.ring([c[0], c[1] + 10.2, c[2]], 0.5, 1.3, 0, 0.22, M.trim, 13);
+    k.round([c[0], c[1] + 10.42, c[2]], 0.6, 1.2, M.lamp, 13);
+    k.cone([c[0], c[1] + 11.62, c[2]], 0.95, 1.9, M.roof, 13);
+    for (const [i, y] of [[1, 1.0], [3, 5.2], [2, 8.4]] as [number, number][]) k.onFace(c, 0.85, 16, i, c[1] + y, k.archAt(0.38, 0.9), M.hole, 13);
+    pivots[13] = c;
+    lighthouse = [c[0], c[1] + 11.0, c[2]];
+  }
+  {
+    const c = seen(-19.0, 8.6, -1.4);
+    islet(m, c, 3.3, 14, 6, M.trim);
+    m.lathe([c[0] + 0.2, c[1] + 0.01, c[2] + 0.3], [[0.0001, 0], [2.2, 0], [2.2, 0.02], [0.0001, 0.02]], 20, M.water, 14);
+    for (const [dx, dz] of [[1.0, -0.6], [-0.8, 1.1], [0.6, 1.3], [-1.1, -0.5]]) m.lathe([c[0] + dx, c[1] + 0.04, c[2] + dz], [[0.0001, 0], [0.3, 0], [0.3, 0.015], [0.0001, 0.015]], 9, M.leaf, 14);
+    for (const [dx, dz] of [[-2.2, -1.6], [2.0, -2.0]]) {
+      const p: V3 = [c[0] + dx, c[1], c[2] + dz];
+      k.round(p, 0.55, 1.3, M.wall, 14);
+      k.cupola([p[0], p[1] + 1.3, p[2]], 0.62, M.petal, 14);
+      k.finial([p[0], p[1] + 1.92, p[2]], 0.4, 14, M.gold);
+    }
+    pivots[14] = c;
+  }
+  for (const [sx, sy, y, w] of [[-11.6, -7.6, 6.0, 0.8], [-24.2, -9.6, 8.0, 0.6], [-13.4, 8.6, -2.0, 0.55]]) {
+    const c = seen(sx, sy, y);
+    m.box([c[0] - w, c[1], c[2] - w], [c[0] + w, c[1] + w * 1.4, c[2] + w], M.wall, 15);
+    k.cornice(c[0] - w, c[2] - w, c[0] + w, c[2] + w, c[1] + w * 1.4, 15, 0.08, M.trim);
+    k.torus([c[0], c[1] + w * 0.7, c[2] + w], w * 0.3, 0.05, 'z', M.accent, 15);
+    k.keel([c[0], c[1], c[2]], w * 0.8, w * 1.3, 15);
+  }
+  pivots[15] = seen(-16, -6, 5);
   return {
     id: 'about',
     mesh: new Float32Array(m.data),
     solids: m.solids(),
     pivots,
-    parts: 11,
+    parts: 16,
+    distant: { 11: 0.1, 12: 0.18, 13: 0.38, 14: 0.3, 15: 0.28 },
     assembly: [
       { part: 0, at: 0, from: [0, -4, 0], fade: true, dur: 1.1 },
       { part: 1, at: 0.25, from: [0, 2.5, 0], fade: true, dur: 0.8 },
@@ -247,9 +304,15 @@ function lotusPalace(): Room {
       { part: 3, at: 1.35, from: [0, -0.9, 0], fade: false, dur: 0.6 },
       { part: 9, at: 1.2, from: [0, 0, 0], fade: true, dur: 0.6 },
       { part: 10, at: 0.9, from: [-2, 0, 0], fade: true, dur: 1.0 },
+      { part: 11, at: 0.5, from: [0, -3, 0], fade: true, dur: 1.1 },
+      { part: 12, at: 0.6, from: [0, -3, 0], fade: true, dur: 1.1 },
+      { part: 13, at: 0.4, from: [0, -4, 0], fade: true, dur: 1.2 },
+      { part: 14, at: 0.7, from: [0, -3, 0], fade: true, dur: 1.1 },
+      { part: 15, at: 1.0, from: [0, 1.5, 0], fade: true, dur: 0.9 },
     ],
-    walk: [[-B + TW + 0.05, WY, 2.75], [-1.2, WY, 2.75], [0.6, WY, 2.8]],
+    walk: [[-B + TW / 2 + 0.93, WY, B - TW / 2 - 0.38], [-1.3, WY, 2.8], [0.6, WY, 2.75]],
     glows: [
+      { at: lighthouse, r: 1.3, mat: M.lamp },
       { at: [0, 4.9, 0], r: 1.4, mat: M.petal },
       { at: [B - 0.4, -3.4, rzMid()], r: 0.9, mat: M.lamp },
       { at: [-1.75, -2.6, B - R + 0.1], r: 0.9, mat: M.lamp },
@@ -257,6 +320,7 @@ function lotusPalace(): Room {
     pose: (part, _since, t) => {
       if (part === 3) return { ry: t * 0.25, off: [0, bob(t, 0.04, 4), 0] };
       if (part === 10) return { off: [0, bob(t, 0.18, 6.5), 0] };
+      if (part === 15) return { off: [0, bob(t, 0.2, 8.5, 2), 0] };
       return {};
     },
     puffs: (pal, t) =>
@@ -272,162 +336,282 @@ function lotusPalace(): Room {
   }
 }
 
-/* ───────────── Research: the Night Window ───────────── */
+/* ───────────── Research: the Moonlit Ruins ───────────── */
 
-function nightWindow(): Room {
+/**
+ * A ruined wall's outline (u along it, v up): arches cut up from its foot, and a broken top given
+ * from its far end round to its near one (u descending; its first and last points stand over the
+ * wall's two ends, so its ends are broken too).
+ */
+function ruinOutline(foot: number, arches: [number, number, number][], top: [number, number][]): [number, number][] {
+  const u0 = top[top.length - 1][0], u1 = top[0][0];
+  const pts: [number, number][] = [[u0, foot]];
+  for (const [a, b, spring] of arches) {
+    const r = (b - a) / 2;
+    pts.push([a, foot], [a, spring]);
+    for (let j = 1; j < 14; j++) {
+      const ang = Math.PI - (j / 14) * Math.PI;
+      pts.push([a + r + r * Math.cos(ang), spring + r * Math.sin(ang)]);
+    }
+    pts.push([b, spring], [b, foot]);
+  }
+  pts.push([u1, foot], ...top);
+  return pts;
+}
+
+function moonRuins(): Room {
   const m = new Mesh();
   const k = kit(m);
   const pivots: V3[] = [];
-  const H = 13, FAR = -8, NEAR = 1, T = 1.0, SILL = 0, BOTTOM = -12;
-  const uFar = -6.2;
-  // The opening's head: onion arches, each meeting the next in a hanging point; the corner is the
-  // crown of the middle arch.
-  const yp = 7.4, ya = 9.9;
-  const span = (NEAR - uFar) / 2.5;
-  const headAt = (u: number) => {
-    const s = (((NEAR - u) / span + 0.5) % 1 + 1) % 1;
-    return yp + (ya - yp) * Math.pow(Math.sin(Math.PI * s), 0.55);
-  };
-  const cusps: number[] = [];
-  for (let u = NEAR - span / 2; u > uFar + 1e-6; u -= span) cusps.push(u);
-  const head: [number, number][] = [];
-  const N = 72;
-  for (let i = 0; i <= N; i++) {
-    const u = uFar + ((NEAR - uFar) * i) / N;
-    head.push([u, i === 0 ? yp : headAt(u)]);
+  // 0 — the floor of the old cloister, broken off along its front, on its stepped foundations
+  {
+    const edge: [number, number][] = [
+      [-7.8, -7.8], [4.8, -7.8], [4.8, -3.4], [5.4, -2.6], [4.9, -1.4], [5.2, -0.2], [4.4, 0.6], [4.9, 1.9], [3.9, 2.7], [4.2, 3.6],
+      [3.0, 4.3], [1.9, 4.0], [1.1, 4.9], [-0.3, 4.5], [-1.2, 5.2], [-2.6, 4.7], [-3.4, 5.4], [-4.6, 4.6], [-5.6, 5.0], [-6.6, 4.3], [-7.8, 4.6],
+    ];
+    k.slab(edge, -0.7, 0, M.floor, 0);
+    m.box([-7.4, -2.4, -7.4], [3.8, -0.7, 3.4], M.stone, 0);
+    m.box([-6.6, -4.6, -6.6], [2.6, -2.4, 2.2], M.stone, 0);
+    m.box([-5.6, -9, -5.6], [1.2, -4.6, 0.8], M.stone, 0);
+    for (const y of [-1.5, -3.5]) k.inlayZ(-7.0, y, y > -2 ? 3.4 : 2.2, y > -2 ? 10.8 : 9.2, 0.05, 0);
+    pivots[0] = [0, -1, 0];
   }
-  // A wall's outline (u along the wall, v up), open at the corner: so no hole is needed.
-  const outline: [number, number][] = [[FAR, BOTTOM], [NEAR, BOTTOM], [NEAR, SILL], [uFar, SILL], ...head, [NEAR, H], [FAR, H]];
-  // 0 — the two great white walls, the points hanging between their arches, inlaid lines
-  m.extrude(outline, 'zy', NEAR - T, NEAR, M.wall, 0, true);
-  m.extrude(outline, 'xy', NEAR - T, NEAR, M.wall, 0, true);
-  for (const u of cusps) {
-    const y = headAt(u + 1e-4);
-    for (const [x, z] of [[NEAR - T / 2, u], [u, NEAR - T / 2]]) {
-      k.tipped([x, y - 0.42, z], [0.24, 0.24, 0.24], 0, Math.PI / 4, Math.PI / 4, M.wall, 0);
-      k.tipped([x, y - 0.8, z], [0.15, 0.15, 0.15], 0, Math.PI / 4, Math.PI / 4, M.wall, 0);
-      k.tipped([x, y - 1.08, z], [0.09, 0.09, 0.09], 0, Math.PI / 4, Math.PI / 4, M.wall, 0);
+  // 1 — the back wall, an arcade broken off in steps; high on it, a window still full of night
+  const BZ0 = -7.2, BZ1 = -6.3;
+  {
+    const top: [number, number][] = [
+      [3.8, 0.0], [4.1, 1.6], [3.7, 3.1], [3.9, 4.6], [3.3, 5.4], [2.8, 5.1], [2.3, 6.3], [1.5, 6.5], [1.1, 7.7], [0.3, 8.0], [0.0, 9.3],
+      [-0.9, 9.5], [-1.3, 10.7], [-2.5, 10.9], [-2.8, 11.7], [-3.7, 11.9], [-4.1, 10.4], [-4.4, 10.5], [-4.2, 8.2], [-4.7, 6.4], [-4.4, 3.8], [-4.6, 0.0],
+    ];
+    m.extrude(ruinOutline(0, [[-3.5, -1.9, 3.6], [-0.8, 0.8, 3.4], [1.8, 2.9, 2.6]], top), 'xy', BZ0, BZ1, M.wall, 1, true);
+    // the night window: an onion arch of sky, stars in it, and a crescent moon
+    const nx = -3.45, ny = 6.0, nw = 1.7, nh = 3.6;
+    k.onionZ(nx - 0.12, ny - 0.12, BZ1, nw + 0.24, nh + 0.3, M.trim, 1);
+    k.onionZ(nx, ny, BZ1 + 0.002, nw, nh, M.night, 1);
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < 22; i++) {
+      const x = nx + 0.15 + rnd() * (nw - 0.3), y = ny + 0.2 + rnd() * (nh * 0.62), sz = 0.025 + rnd() * 0.04;
+      m.decal([x, y, BZ1 + 0.004], [1, 0, 0], [0, 1, 0], [[0, -sz], [sz, 0], [0, sz], [-sz, 0]], M.glow, 1);
     }
+    m.decal([nx + 1.1, ny + 2.3, BZ1 + 0.004], [1, 0, 0], [0, 1, 0], circle(0.32, 20), M.glow, 1);
+    m.decal([nx + 1.22, ny + 2.4, BZ1 + 0.006], [1, 0, 0], [0, 1, 0], circle(0.29, 20), M.night, 1);
+    m.box([nx - 0.2, ny - 0.22, BZ1], [nx + nw + 0.2, ny, BZ1 + 0.14], M.trim, 1);
+    // windows of a lost upper floor, string courses, ivy
+    for (const x of [-0.5, 0.9]) k.windowZ(x, 5.4, BZ1, 0.5, 1.1, 1, M.hole);
+    k.inlayZ(-4.3, 4.9, BZ1, 7.6, 0.05, 1);
+    k.vines([-1.6, 10.2, BZ1], 'z', 1.6, 4.2, 5, 1);
+    k.vines([1.6, 6.1, BZ1], 'z', 1.2, 3.0, 11, 1);
+    pivots[1] = [0, 0, (BZ0 + BZ1) / 2];
   }
-  for (const y of [H - 0.7, SILL - 1.2]) {
-    k.inlayZ(FAR + 0.3, y, NEAR, NEAR - FAR - 0.3, 0.05, 0);
-    k.inlayX(NEAR, y, NEAR, NEAR - FAR - 0.3, 0.05, 0);
+  // 2 — the left wall, the same, and the door she comes out of
+  const LX0 = -7.2, LX1 = -6.3;
+  {
+    const top: [number, number][] = [
+      [3.4, 0.0], [3.7, 1.1], [3.2, 2.2], [2.7, 3.3], [2.2, 3.0], [1.8, 4.6], [1.0, 4.9], [0.6, 6.2], [-0.2, 6.6], [-0.6, 7.9],
+      [-1.6, 8.2], [-2.0, 9.6], [-3.0, 9.8], [-3.4, 10.9], [-4.1, 11.1], [-4.4, 9.2], [-4.2, 6.6], [-4.7, 4.4], [-4.6, 0.0],
+    ];
+    m.extrude(ruinOutline(0, [[-2.8, -1.2, 3.4], [-0.2, 1.4, 2.6]], top), 'zy', LX0, LX1, M.wall, 2, true);
+    k.doorX(LX1, 0, -3.2, 0.95, 1.9, M.hole, 2);
+    k.frame([LX1, -0.05, -3.05], 'x', 1.25, 2.15, 0.05, M.trim, 2);
+    for (const z of [-3.1, -0.8]) k.windowX(LX1, 5.6, z, 0.5, 1.1, 2, M.hole);
+    k.inlayX(LX1, 4.9, -4.3, -4.3 - 1.0, 0.05, 2);
+    k.vines([LX1, 9.0, -2.2], 'x', 1.4, 4.0, 9, 2);
+    pivots[2] = [(LX0 + LX1) / 2, 0, 0];
   }
-  for (const u of [-6.6, -4.2, -1.8]) {
-    k.windowZ(u, -6.4, NEAR, 0.5, 1.2, 0, M.hole);
-    k.windowX(NEAR, -6.4, u + 0.5, 0.5, 1.2, 0, M.hole);
+  // 3 — where the corner fell: the stump of a round tower, its blocks scattered, one leaning on the
+  // back wall
+  {
+    k.round([-6.7, 0, -6.7], 1.05, 3.4, M.wall, 3);
+    k.ring([-6.7, 3.4, -6.7], 0.6, 1.12, 0, 0.18, M.trim, 3);
+    m.box([-7.3, 3.4, -7.2], [-6.4, 4.4, -6.5], M.wall, 3);
+    k.onFace([-6.7, 0, -6.7], 1.05, 16, 3, 0.9, k.archAt(0.5, 1.1), M.hole, 3);
+    k.tipped([-5.3, 0.38, -5.6], [0.9, 0.76, 0.7], 0.0, 0.0, 0.5, M.wall, 3);
+    k.tipped([-6.0, 0.3, -4.9], [0.6, 0.6, 0.8], 0.0, 0.0, -0.3, M.wall, 3);
+    k.tipped([-5.0, 0.86, -6.25], [0.75, 1.9, 0.6], 0.0, -0.32, 0.0, M.wall, 3);
+    k.tipped([-4.4, 0.2, -4.7], [0.4, 0.4, 0.5], 0.0, 0.0, 0.8, M.trim, 3);
+    // stray floor tiles, lifted and tipped
+    k.tipped([0.8, 0.12, 3.5], [0.9, 0.12, 0.9], 0.18, 0.05, 0.3, M.floor, 3);
+    k.tipped([-4.6, 0.14, 3.6], [0.9, 0.12, 0.9], -0.12, 0.2, 0.1, M.floor, 3);
+    pivots[3] = [-6, 0, -6];
   }
-  pivots[0] = [0, 4, 0];
-  // 1 — its crown: a skyline of onion-headed peaks along both walls, a dome on the corner
-  const peak = (u: number, w: number, h: number) => {
-    const shape: [number, number][] = [[u - w / 2, H], [u + w / 2, H], [u + w / 2, H + h * 0.55]];
-    for (let j = 1; j < 14; j++) {
-      const t = j / 14, a = t * Math.PI;
-      // an onion's shoulder: out a little, then in to the point
-      const r = (w / 2) * (1 + 0.18 * Math.sin(a * 1.2)) * Math.cos(t * Math.PI / 2);
-      shape.push([u + r, H + h * 0.55 + h * 0.45 * Math.sin(t * Math.PI / 2)]);
+  // 4 — the colonnade down the right: two columns still carry their beam, two are broken off; one
+  // lies fallen across the floor in its drums
+  const CX = 2.7;
+  {
+    const column = (z: number, h: number, whole: boolean) => {
+      m.box([CX - 0.55, 0, z - 0.55], [CX + 0.55, 0.32, z + 0.55], M.trim, 4);
+      m.lathe([CX, 0.32, z], [[0.4, 0], [0.36, h - 0.32]], 10, M.wall, 4, Math.PI / 10);
+      if (whole) m.box([CX - 0.55, h, z - 0.55], [CX + 0.55, h + 0.36, z + 0.55], M.trim, 4);
+      else k.tipped([CX + 0.05, h + 0.12, z - 0.05], [0.62, 0.3, 0.55], 0.25, -0.2, 0.4, M.wall, 4);
+    };
+    column(-4.2, 7.4, true);
+    column(-2.0, 7.4, true);
+    column(0.2, 4.6, false);
+    column(2.4, 1.7, false);
+    m.box([CX - 0.6, 7.76, -4.8], [CX + 0.6, 8.5, -1.4], M.trim, 4);
+    k.inlayX(CX + 0.6, 8.02, -1.6, 3.0, 0.05, 4);
+    for (const [x, len, turn] of [[-3.2, 0.95, 0.05], [-2.1, 0.95, -0.04], [-0.95, 0.8, 0.12]] as [number, number, number][]) {
+      const from = m.data.length;
+      m.lathe([0, 0, 0], [[0.4, 0], [0.4, len]], 10, M.wall, 4, Math.PI / 10);
+      place(m.data, from, 0, -Math.PI / 2, turn, [x, 0.39, 2.2]);
     }
-    shape.push([u, H + h]);
-    for (let j = 13; j >= 1; j--) {
-      const [x, y] = shape[2 + j];
-      shape.push([2 * u - x, y]);
+    pivots[4] = [CX, 0, -1];
+  }
+  // 5 — a stair up the back wall to a landing where the wall broke away
+  {
+    for (let i = 0; i < 10; i++) {
+      const x0 = 3.6 - (i + 1) * 0.4;
+      m.box([x0, 0, BZ1], [x0 + 0.4, (i + 1) * 0.4, BZ1 + 1.1], M.floor, 5);
     }
-    shape.push([u - w / 2, H + h * 0.55]);
-    return shape;
-  };
-  for (const [u, w, h] of [[-7.0, 1.2, 1.7], [-5.0, 1.3, 2.3], [-2.9, 1.4, 2.9], [-0.9, 1.5, 3.4]] as [number, number, number][]) {
-    m.extrude(peak(u, w, h), 'zy', NEAR - T + 0.12, NEAR - 0.12, M.wall, 1, true);
-    m.extrude(peak(u, w, h), 'xy', NEAR - T + 0.12, NEAR - 0.12, M.wall, 1, true);
+    m.box([-1.2, 0, BZ1], [-0.4, 4.0, BZ1 + 1.1], M.floor, 5);
+    k.inlayZ(-1.2, 3.55, BZ1 + 1.1, 0.8, 0.05, 5);
+    pivots[5] = [1.0, 0, BZ1 + 0.55];
   }
-  k.dome([NEAR - T / 2, H, NEAR - T / 2], 0.62, 1.5, 1, M.wall);
-  k.finial([NEAR - T / 2, H + 1.5, NEAR - T / 2], 0.6, 1, M.wall);
-  pivots[1] = [0, H, 0];
-  // 2 — the ledge outside, a stair going down from it, a door, a rune
-  const LW = 2.6;
-  m.box([NEAR, SILL - 0.55, FAR], [NEAR + LW, SILL, NEAR + LW], M.floor, 2);
-  m.box([FAR, SILL - 0.55, NEAR], [NEAR, SILL, NEAR + LW], M.floor, 2);
-  k.inlayZ(FAR, SILL - 0.32, NEAR + LW, NEAR + LW - FAR, 0.05, 2);
-  k.inlayX(NEAR + LW, SILL - 0.32, NEAR + LW, NEAR + LW - FAR, 0.05, 2);
-  // corbels under it, stepping in to the wall
-  for (const u of [-7.0, -5.2, -3.4, -1.6, 0.2]) {
-    for (let j = 0; j < 3; j++) {
-      const d = LW - 0.5 - j * 0.7, y0 = SILL - 0.55 - (j + 1) * 0.42;
-      m.box([NEAR, y0, u], [NEAR + d, y0 + 0.42, u + 0.5], M.wall, 2);
-      m.box([u, y0, NEAR], [u + 0.5, y0 + 0.42, NEAR + d], M.wall, 2);
+  // 6 — what is still falling, stopped in the air: stones over the broken tops, a drum over its
+  // column, and the stair going on, step by step, into the sky
+  {
+    const stones: [V3, V3, V3][] = [
+      [[1.3, 9.0, -6.75], [0.8, 0.55, 0.7], [0.2, 0.3, 0.4]],
+      [[-0.6, 10.9, -6.7], [0.6, 0.45, 0.6], [-0.3, 0.2, 0.9]],
+      [[2.9, 7.0, -6.8], [0.55, 0.4, 0.55], [0.4, -0.2, 0.2]],
+      [[-2.2, 12.9, -6.8], [0.5, 0.4, 0.5], [0.1, 0.5, -0.3]],
+      [[-6.75, 9.3, 0.4], [0.6, 0.5, 0.7], [-0.25, 0.3, 0.6]],
+      [[-6.7, 7.2, 2.0], [0.5, 0.42, 0.55], [0.3, 0.1, -0.5]],
+    ];
+    for (const [c, sz, [ax, az, ay]] of stones) k.tipped(c, sz, ax, az, ay, M.wall, 6);
+    m.lathe([CX, 5.35, 0.2], [[0.36, 0], [0.36, 0.7]], 10, M.wall, 6, Math.PI / 10);
+    for (let i = 0; i < 4; i++) {
+      const x0 = -1.75 - i * 0.62;
+      k.tipped([x0, 4.3 + i * 0.5, BZ1 + 0.55], [0.42, 0.34, 1.05], (i - 1.5) * 0.05, (i % 2 ? -1 : 1) * 0.08, 0.04 * i, M.floor, 6);
     }
+    pivots[6] = [0, 8, -4];
   }
-  for (let i = 0; i < 10; i++) m.box([FAR + 1.2, SILL - 0.3 - i * 0.3, NEAR + LW + i * 0.32], [FAR + 2.5, SILL - i * 0.3, NEAR + LW + 0.32 + i * 0.32], M.floor, 2);
-  k.doorX(NEAR, SILL, -5.2, 1.0, 1.8, M.wood, 2);
-  k.runeRing([FAR + 3.4, SILL, NEAR + 1.3], 0.55, 0.64, M.accent, 2);
-  k.runeRing([FAR + 3.4, SILL, NEAR + 1.3], 0.26, 0.32, M.accent, 2);
-  for (const [x, z] of [[NEAR + LW - 0.25, NEAR + LW - 0.25], [NEAR + LW - 0.25, -3.0], [-3.0, NEAR + LW - 0.25]]) {
-    m.box([x - 0.12, SILL, z - 0.12], [x + 0.12, SILL + 0.9, z + 0.12], M.wall, 2);
-    k.finial([x, SILL + 0.9, z], 0.5, 2, M.wall);
+  // 7 — a rune ring set in the floor, glowing, and a lamp on a post
+  const RC: V3 = [-0.8, 0, 0.5];
+  {
+    k.runeRing(RC, 1.15, 1.3, M.glow, 7);
+    k.runeRing(RC, 0.55, 0.62, M.glow, 7);
+    m.decal([RC[0], 0.007, RC[2]], [1, 0, 0], [0, 0, -1], k.star(0, 0, 8, 0.42, 0.2, Math.PI / 8).map(([a, b]) => [a, -b] as [number, number]), M.glow, 7);
+    pivots[7] = RC;
   }
-  pivots[2] = [0, -1, 0];
-  // 3 — the night inside: walls and a floor of sky, stars, and a moon. The walls rise towards the
-  // frame (every look through the window lands on night) but stay low in the far corner, where
-  // they would show over the frame's top.
-  const IN = NEAR - T;
-  const nightTop = (a: number) => 4.0 + ((a - FAR) / (IN - FAR)) * 5.8;
-  m.quad([FAR, -0.6, FAR], [FAR, -0.6, IN], [FAR, nightTop(IN), IN], [FAR, nightTop(FAR), FAR], M.night, 3, [1, 0, 0]);
-  m.quad([FAR, -0.6, FAR], [FAR, nightTop(FAR), FAR], [IN, nightTop(IN), FAR], [IN, -0.6, FAR], M.night, 3, [0, 0, 1]);
-  m.quad([FAR, -0.6, FAR], [IN, -0.6, FAR], [IN, -0.6, IN], [FAR, -0.6, IN], M.night, 3, [0, 1, 0]);
-  let seed = 3;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < 170; i++) {
-    const onX = rnd() < 0.5;
-    const a = FAR + 0.2 + rnd() * (IN - FAR - 0.4), y = -0.4 + rnd() * (nightTop(a) + 0.2), s = 0.02 + rnd() * 0.055;
-    const st: [number, number][] = [[0, -s], [s, 0], [0, s], [-s, 0]];
-    if (onX) m.decal([FAR, y, a], [0, 0, -1], [0, 1, 0], st, M.glow, 3);
-    else m.decal([a, y, FAR], [1, 0, 0], [0, 1, 0], st, M.glow, 3);
+  {
+    m.box([-3.6, 0, 1.6], [-3.4, 2.2, 1.8], M.ink, 8);
+    m.lathe([-3.5, 2.2, 1.7], [[0.0001, 0], [0.12, 0.06], [0.16, 0.26], [0.1, 0.4], [0.0001, 0.44]], 6, M.lamp, 8);
+    pivots[8] = [-3.5, 0, 1.7];
   }
-  // the moon, a crescent on the left wall of night
-  m.decal([-1.4, 5.6, FAR], [1, 0, 0], [0, 1, 0], circle(0.55, 24), M.glow, 3);
-  m.decal([-1.22, 5.75, FAR + 0.003], [1, 0, 0], [0, 1, 0], circle(0.5, 24), M.night, 3);
-  pivots[3] = [0, 1, 0];
-  // 4 — the observatory standing in the night: a tall shaft, a gallery with four turrets, a lit lantern room
-  const tx = -4.0, tz = -4.0, GY = 6.2;
-  m.box([tx - 1.0, -0.6, tz - 1.0], [tx + 1.0, GY, tz + 1.0], M.stone, 4);
-  k.band(tx - 1.0, tz - 1.0, tx + 1.0, tz + 1.0, 2.6, 0.1, 4, 0.05, M.trim);
-  k.band(tx - 1.0, tz - 1.0, tx + 1.0, tz + 1.0, 4.6, 0.1, 4, 0.05, M.trim);
-  m.box([tx - 1.9, GY, tz - 1.9], [tx + 1.9, GY + 0.5, tz + 1.9], M.trim, 4);
-  for (const [dx, dz] of [[-1.5, -1.5], [1.5, -1.5], [1.5, 1.5], [-1.5, 1.5]]) {
-    m.box([tx + dx - 0.36, GY + 0.5, tz + dz - 0.36], [tx + dx + 0.36, GY + 1.5, tz + dz + 0.36], M.stone, 4);
-    k.dome([tx + dx, GY + 1.5, tz + dz], 0.36, 0.65, 4, M.dome);
+  // Off across the page, behind the words: more of the ruined city, further off in the haze.
+  // 9 — a rotunda broken open, on its own island, its dome fallen beside it
+  {
+    const c = seen(-15.5, 1.2, -0.4);
+    islet(m, c, 4.0, 9, 3);
+    k.rotunda(c, 2.3, 4.6, 10, 9, { broken: [4.6, 4.6, 2.6, 4.6, 1.2, 0.6, 3.4, 4.6, 1.9, 4.6] });
+    // the beam still lying across three whole columns
+    const a = (j: number) => (j / 10) * Math.PI * 2 + Math.PI / 10;
+    for (const j of [0, 1]) {
+      const p0: V3 = [c[0] + 2.3 * Math.cos(a(j)), c[1] + 5.05, c[2] + 2.3 * Math.sin(a(j))];
+      const p1: V3 = [c[0] + 2.3 * Math.cos(a(j + 1)), c[1] + 5.05, c[2] + 2.3 * Math.sin(a(j + 1))];
+      const len = Math.hypot(p1[0] - p0[0], p1[2] - p0[2]);
+      k.tipped([(p0[0] + p1[0]) / 2, p0[1] + 0.22, (p0[2] + p1[2]) / 2], [len + 0.5, 0.45, 0.6], 0, 0, -Math.atan2(p1[2] - p0[2], p1[0] - p0[0]), M.trim, 9);
+    }
+    const from = m.data.length;
+    k.cupola([0, 0, 0], 1.7, M.wall, 9, 18, 0.85);
+    place(m.data, from, 0.55, 0.25, 0.4, [c[0] + 2.4, c[1] - 0.15, c[2] + 2.3]);
+    pivots[9] = c;
   }
-  m.box([tx - 0.8, GY + 0.5, tz - 0.8], [tx + 0.8, GY + 2.3, tz + 0.8], M.stone, 4);
-  k.slitZ(tx - 0.3, GY + 0.85, tz + 0.8, 0.6, 1.0, 4, M.lamp);
-  k.slitX(tx + 0.8, GY + 0.85, tz + 0.3, 0.6, 1.0, 4, M.lamp);
-  k.dome([tx, GY + 2.3, tz], 0.9, 1.45, 4, M.dome);
-  k.finial([tx, GY + 3.75, tz], 0.6, 4, M.dome);
-  for (let i = 0; i < 6; i++) k.slitZ(tx - 0.13, 0.2 + i * 0.95, tz + 1.0, 0.26, 0.5, 4, M.glow);
-  for (let i = 0; i < 3; i++) k.slitX(tx + 1.0, 1.3 + i * 1.6, tz + 0.13, 0.26, 0.6, 4, M.glow);
-  pivots[4] = [tx, 0, tz];
-  // 5 — its rune, turning on the gallery
-  k.runeRing([tx, GY + 0.5, tz], 1.25, 1.38, M.glow, 5);
-  pivots[5] = [tx, GY + 0.5, tz];
+  // 10 — high up, an aqueduct broken in two, going off into the haze
+  {
+    const c = seen(-19.5, -9.6, 2.6);
+    const sp = c[1] - 3.4;
+    const wall = (arches: [number, number, number][], top: [number, number][]) =>
+      m.extrude(ruinOutline(-5, arches, top), 'zy', c[0] - 0.45, c[0] + 0.45, M.wall, 10, true);
+    const a0 = c[2] - 6, a1 = c[2] - 0.6;
+    wall([[a0 + 0.5, a0 + 2.1, sp], [a0 + 2.9, a0 + 4.5, sp]], [[a1, c[1] - 2.6], [a1 - 0.3, c[1] - 1.2], [a1 + 0.1, c[1] - 0.5], [a1 - 0.2, c[1]], [a0, c[1]]]);
+    const b0 = c[2] + 0.8, b1 = c[2] + 6.5;
+    wall([[b0 + 1.0, b0 + 2.6, sp], [b0 + 3.4, b0 + 5.0, sp]], [[b1, c[1]], [b0 + 0.5, c[1]], [b0 + 0.2, c[1] - 0.9], [b0 + 0.45, c[1] - 1.8], [b0, c[1] - 2.8]]);
+    m.box([c[0] - 0.55, c[1], c[2] - 6], [c[0] + 0.55, c[1] + 0.25, c[2] - 0.7], M.trim, 10);
+    m.box([c[0] - 0.55, c[1], c[2] + 1.3], [c[0] + 0.55, c[1] + 0.25, c[2] + 6.5], M.trim, 10);
+    pivots[10] = c;
+  }
+  // 11 — a round tower, whole but for its broken crown, on a rock
+  {
+    const c = seen(-22.5, 2.4, -1.0);
+    islet(m, c, 2.6, 11, 8);
+    k.round(c, 1.25, 8.4, M.wall, 11);
+    k.ring([c[0], c[1] + 3.2, c[2]], 1.0, 1.36, 0, 0.16, M.trim, 11);
+    k.ring([c[0], c[1] + 8.4, c[2]], 0.9, 1.45, 0, 0.3, M.trim, 11);
+    for (const [i, h] of [[0, 0.9], [2, 0.6], [4, 1.1]] as [number, number][]) {
+      const a = (i / 16) * Math.PI * 2;
+      m.box([c[0] + 1.15 * Math.cos(a) - 0.25, c[1] + 8.7, c[2] + 1.15 * Math.sin(a) - 0.25], [c[0] + 1.15 * Math.cos(a) + 0.25, c[1] + 8.7 + h, c[2] + 1.15 * Math.sin(a) + 0.25], M.wall, 11);
+    }
+    for (const [i, y] of [[1, 0.0], [3, 4.4], [2, 6.0]] as [number, number][]) k.onFace(c, 1.25, 16, i, c[1] + y, k.archAt(0.55, y ? 1.2 : 1.7), M.hole, 11);
+    k.vines([c[0] + 1.1, c[1] + 8.1, c[2] + 0.4], 'x', 0.9, 3.2, 17, 11);
+    pivots[11] = c;
+  }
+  // 13 — the bridge that led out to it, its middle fallen away (one stone still hanging there)
+  {
+    bridgeHalf(4.4, 6.3, 0);
+    bridgeHalf(7.5, 9.6, 1);
+    k.tipped([-6.8, -0.5, 6.9], [0.9, 0.5, 0.7], 0.2, 0.15, 0.1, M.wall, 12);
+    pivots[13] = [-6.8, 0, 7];
+  }
+  function bridgeHalf(z0: number, z1: number, side: number) {
+    // deck and parapets, on a pier at its whole end
+    m.box([-7.4, -0.5, z0], [-6.2, 0, z1], M.floor, 13);
+    for (const x of [-7.4, -6.4]) m.box([x, 0, z0 + side * 0.3], [x + 0.2, 0.45, z1 - (1 - side) * 0.4], M.trim, 13);
+    const pz = side ? z1 - 1.0 : z0 + 0.1;
+    m.box([-7.3, -6, pz], [-6.3, -0.5, pz + 0.9], M.stone, 13);
+    k.bridge('z', side ? z0 : pz + 0.9, side ? pz : z1, -7.35, -6.25, -0.5, 1.4, 0.15, M.wall, 13);
+  }
+  // 12 — stones drifting between them
+  {
+    for (const [sx, sy, y, sz] of [[-11.2, -5.4, 4.0, 0.7], [-18.0, -1.6, 3.2, 0.5], [-25.0, -4.6, 6.0, 0.6], [-12.6, 4.4, -1.0, 0.45], [-20.6, -14.0, 7.0, 0.5]]) {
+      k.tipped(seen(sx, sy, y), [sz, sz * 0.75, sz * 0.9], sx * 0.1, sy * 0.07, y * 0.3, M.wall, 12);
+    }
+    pivots[12] = seen(-18, -3, 3);
+  }
   return {
     id: 'research',
     mesh: new Float32Array(m.data),
     solids: m.solids(),
     pivots,
-    parts: 6,
+    parts: 14,
+    distant: { 9: 0.24, 10: 0.42, 11: 0.36, 12: 0.3, 13: 0.12 },
     assembly: [
-      { part: 2, at: 0, from: [0, -2.5, 0], fade: true, dur: 0.9 },
-      { part: 0, at: 0.15, from: [0, -5, 0], fade: true, dur: 1.1 },
-      { part: 3, at: 0.55, from: [0, 0, 0], fade: true, dur: 0.8 },
-      { part: 4, at: 0.75, from: [0, -3.5, 0], fade: true, dur: 1.0 },
-      { part: 1, at: 0.95, from: [0, 2.6, 0], fade: false, dur: 0.6 },
-      { part: 5, at: 1.35, from: [0, 0.8, 0], fade: false, dur: 0.5 },
+      { part: 0, at: 0, from: [0, -4, 0], fade: true, dur: 1.0 },
+      { part: 1, at: 0.2, from: [0, 3, 0], fade: true, dur: 1.0 },
+      { part: 2, at: 0.3, from: [0, 3, 0], fade: true, dur: 1.0 },
+      { part: 4, at: 0.45, from: [0, 3, 0], fade: true, dur: 0.9 },
+      { part: 5, at: 0.55, from: [0, 2, 0], fade: true, dur: 0.8 },
+      { part: 3, at: 0.7, from: [0, 1.2, 0], fade: true, dur: 0.7 },
+      { part: 6, at: 0.95, from: [0, 1.6, 0], fade: true, dur: 0.9 },
+      { part: 7, at: 1.1, from: [0, 0, 0], fade: true, dur: 0.6 },
+      { part: 8, at: 1.0, from: [0, 1.0, 0], fade: true, dur: 0.6 },
+      { part: 9, at: 0.35, from: [0, -3, 0], fade: true, dur: 1.2 },
+      { part: 10, at: 0.5, from: [0, -3, 0], fade: true, dur: 1.2 },
+      { part: 11, at: 0.6, from: [0, -3, 0], fade: true, dur: 1.2 },
+      { part: 12, at: 1.0, from: [0, 1.2, 0], fade: true, dur: 1.0 },
+      { part: 13, at: 0.3, from: [0, -2, 0], fade: true, dur: 1.0 },
     ],
-    walk: [[NEAR + 0.05, SILL, -4.7], [NEAR + 1.0, SILL, -4.3], [NEAR + 1.2, SILL, -0.6], [NEAR + 0.9, SILL, NEAR + 0.9]],
+    walk: [[LX1 + 0.05, 0, -3.65], [-5.0, 0, -3.65], [-3.3, 0, -1.7], [-2.1, 0, -0.35]],
     glows: [
-      { at: [tx, GY + 1.3, tz], r: 1.6, mat: M.lamp },
-      { at: [tx, 2.6, tz + 1.1], r: 1.6, mat: M.glow },
-      { at: [-1.4, 5.6, FAR + 0.05], r: 1.2, mat: M.glow },
+      { at: [RC[0], 0.3, RC[2]], r: 1.8, mat: M.glow },
+      { at: [-2.6, 7.6, BZ1 + 0.1], r: 1.6, mat: M.glow },
+      { at: [-3.5, 2.4, 1.7], r: 0.9, mat: M.lamp },
     ],
-    pose: (part, _since, t) => (part === 5 ? { ry: t * 0.35 } : {}),
+    pose: (part, _since, t) => {
+      if (part === 6) return { off: [0, bob(t, 0.12, 7.5), 0] };
+      if (part === 7) return { ry: t * 0.12 };
+      if (part === 12) return { off: [0, bob(t, 0.18, 9, 1), 0] };
+      return {};
+    },
+    puffs: (pal, t) =>
+      [[-6.5, -5.5, 6.5], [4.5, -5.8, 5.5], [-1.0, -6.4, 7.4], [7.2, -5.6, -0.4], [-8.4, -6.0, 0.4], [2.6, -6.6, -6.8]].map(([x, y, z], i) => ({
+        at: [x + bob(t, 0.3, 12, i), y, z] as V3,
+        r: 2.6 + (i % 3) * 0.6,
+        color: top(pal, M.trim),
+        a: 0.32,
+      })),
   };
 }
 
@@ -505,13 +689,16 @@ function amberSky(): Room {
   // 7 — the third pillar, at the walk's far end, with its own arched legs and a gate on top
   const qx0 = 4.6, qw = 1.2, qz0 = -9.3;
   {
-    pillar(qx0, qz0, qw, -D, 9.6, 7, [[1.6, 3.4], [6.2, 7.0]]);
+    // (round, this one: a column ringed in the accent)
+    const qc: V3 = [qx0 + qw / 2, -D, qz0 + qw / 2];
+    k.round(qc, qw / 2 + 0.08, 9.6 + D, M.stone, 7);
+    for (const [a, b] of [[1.6, 3.4], [6.2, 7.0]]) k.ring([qc[0], a, qc[2]], qw / 2 - 0.1, qw / 2 + 0.12, 0, b - a, M.accent, 7);
     m.box([qx0 - 0.4, 9.6, qz0 - 0.4], [qx0 + qw + 0.4, 10.0, qz0 + qw + 0.4], M.stone, 7);
     m.box([qx0 - 0.4, 10.0, qz0 - 0.4], [qx0 + qw + 0.4, 11.6, qz0 + 0.2], M.wall, 7);
     m.box([qx0 + qw - 0.2, 10.0, qz0 - 0.4], [qx0 + qw + 0.4, 11.6, qz0 + qw + 0.4], M.wall, 7);
     k.doorX(qx0 + qw + 0.4, 10.0, qz0 + 0.95, 0.6, 1.25, M.hole, 7);
     m.box([qx0 - 0.45, 11.6, qz0 - 0.45], [qx0 + qw + 0.45, 11.8, qz0 + qw + 0.45], M.floor, 7);
-    k.slitZ(qx0 + 0.5, 4.6, qz0 + qw + 0.03, 0.2, 0.55, 7);
+    k.onFace(qc, qw / 2 + 0.08, 16, 4, 4.6, rect(-0.1, 0, 0.2, 0.55), M.hole, 7);
     pivots[7] = [qx0 + qw / 2, 0, qz0 + qw / 2];
   }
   // 8 — a floating gate block out on the right, and small blocks drifting
@@ -535,13 +722,54 @@ function amberSky(): Room {
   pivots[2] = [0.5, yb + L / 2, 1.5];
   const culledFrom = m.count;
   m.box([TO[0] + L - w, TO[1] + L - w, TO[2] + L - w], [TO[0] + L, TO[1] + L, TO[2] + L], M.penrose, 2, 'px');
+  // Off across the page: 9 — the walk going on, a bridge over the clouds, to a round gate tower;
+  // 10 — two slender columns rising out of the cloud; 11 — an observatory on a floating rock;
+  // 12 — round stepping stones climbing into the sky
+  {
+    m.box([-0.5, -0.6, 1.6], [1.7, 0, 7.4], M.floor, 9);
+    k.bridge('z', 1.6, 7.4, -0.4, 1.6, -0.6, 3.6, 0.4, M.wall, 9);
+    k.friezeX(1.6, 7.4, -0.45, 1.7, 9);
+    const gc: V3 = [0.6, -0.6, 9.2];
+    islet(m, gc, 2.4, 9, 4);
+    k.round([gc[0], 0, gc[2]], 1.15, 3.2, M.stone, 9);
+    k.ring([gc[0], 1.0, gc[2]], 1.0, 1.24, 0, 0.5, M.accent, 9);
+    k.ring([gc[0], 3.2, gc[2]], 0.8, 1.35, 0, 0.18, M.petal, 9);
+    k.cupola([gc[0], 3.38, gc[2]], 1.05, M.petal, 9);
+    k.onFace([gc[0], 0, gc[2]], 1.15, 16, 0, 0, k.archAt(0.62, 1.25), M.hole, 9);
+    k.onFace([gc[0], 0, gc[2]], 1.15, 16, 3, 1.9, k.archAt(0.3, 0.6), M.hole, 9);
+    pivots[9] = [0.6, 0, 5];
+  }
+  for (const [sx, sy, h, r] of [[-12.2, 1.0, 11.5, 0.7], [-17.6, -1.4, 13.5, 0.85], [-23.4, 3.0, 10, 0.6]]) {
+    const c = seen(sx, sy, -6);
+    k.round(c, r, h, M.stone, 10);
+    for (const y of [h * 0.35, h * 0.7]) k.ring([c[0], c[1] + y, c[2]], r - 0.1, r + 0.1, 0, 0.9, M.accent, 10);
+    k.ring([c[0], c[1] + h, c[2]], r - 0.2, r + 0.22, 0, 0.16, M.petal, 10);
+    k.cone([c[0], c[1] + h + 0.16, c[2]], r + 0.12, r * 2.2, M.petal, 10);
+  }
+  pivots[10] = seen(-17, -4, -6);
+  {
+    const c = seen(-20.5, -7.4, 4.0);
+    islet(m, c, 2.6, 11, 9);
+    k.round(c, 1.5, 1.6, M.stone, 11);
+    k.ring([c[0], c[1] + 1.6, c[2]], 1.1, 1.62, 0, 0.16, M.accent, 11);
+    k.cupola([c[0], c[1] + 1.76, c[2]], 1.4, M.white, 11);
+    k.tipped([c[0] + 0.5, c[1] + 2.9, c[2] + 0.4], [0.32, 2.2, 0.32], 0.7, -0.4, 0.6, M.accent, 11);
+    k.onFace(c, 1.5, 16, 2, c[1], k.archAt(0.6, 1.1), M.hole, 11);
+    pivots[11] = c;
+  }
+  for (let i = 0; i < 5; i++) {
+    const c = seen(-9.0 - i * 1.7, -5.6 - i * 0.8, 2.6 + i * 1.1);
+    m.lathe(c, [[0.0001, -0.3], [0.75, -0.3], [0.75, 0], [0.0001, 0]], 12, i % 2 ? M.wall : M.stone, 12);
+  }
+  pivots[12] = seen(-13, -11, 5);
   return {
     id: 'projects',
     mesh: new Float32Array(m.data),
     solids: m.solids(),
     culledFrom,
     pivots,
-    parts: 9,
+    parts: 13,
+    distant: { 9: 0.08, 10: 0.36, 11: 0.4, 12: 0.3 },
     assembly: [
       { part: 0, at: 0, from: [0, -3, 0], fade: true, dur: 0.9 },
       { part: 1, at: 0.15, from: [0, -4, 0], fade: true, dur: 0.9 },
@@ -552,6 +780,10 @@ function amberSky(): Room {
       { part: 5, at: 1.0, from: [0, 2.0, 0], fade: false, dur: 0.6 },
       { part: 8, at: 0.9, from: [0, 1.5, 0], fade: true, dur: 1.0 },
       { part: 6, at: 1.35, from: [0, 0, 0], fade: true, dur: 0.5 },
+      { part: 9, at: 0.35, from: [0, -3, 0], fade: true, dur: 1.0 },
+      { part: 10, at: 0.2, from: [0, -5, 0], fade: true, dur: 1.3 },
+      { part: 11, at: 0.7, from: [0, 2, 0], fade: true, dur: 1.0 },
+      { part: 12, at: 0.9, from: [0, 1.5, 0], fade: true, dur: 0.9 },
     ],
     walk: [[1.08, 0, 0.45], [1.35, 0, 0.3], [1.1, 0, -1.8]],
     glows: [
@@ -562,6 +794,7 @@ function amberSky(): Room {
     pose: (part, _since, t) => {
       if (part === 5) return { off: [0, bob(t, 0.12, 6.4), 0] };
       if (part === 8) return { off: [0, bob(t, 0.16, 7.2, 1), 0] };
+      if (part === 11 || part === 12) return { off: [0, bob(t, 0.18, 8 + part * 0.4, part), 0] };
       if (part === 6) {
         // The crow paces its ledge, turning at either end.
         const p = (t * 0.18) % 2;
@@ -581,172 +814,224 @@ function amberSky(): Room {
   };
 }
 
-/* ───────────── Activity: the Endless Stair ───────────── */
+/* ───────────── Activity: the Penrose Stair ───────────── */
 
-function endlessStair(): Room {
+/**
+ * A flight of `n` steps: from `from` along `along`, each `run` long and `rise` higher in the
+ * direction `up` (whatever way that is: up a wall, down from a ceiling), `width` wide along `side`.
+ * Solid down to its floor, or (with `thick`) a floating band of that depth.
+ */
+function steps(m: Mesh, from: V3, along: V3, up: V3, side: V3, n: number, run: number, rise: number, width: number, mat: number, part: number, thick = 0) {
+  for (let i = 0; i < n; i++) {
+    const a0 = i * run, a1 = (i + 1) * run, u1 = (i + 1) * rise, u0 = thick ? u1 - thick : 0;
+    const p = (a: number, u: number, w: number): V3 => [0, 1, 2].map((j) => from[j] + along[j] * a + up[j] * u + side[j] * w) as V3;
+    const c0 = p(a0, u0, 0), c1 = p(a1, u1, width);
+    m.box([Math.min(c0[0], c1[0]), Math.min(c0[1], c1[1]), Math.min(c0[2], c1[2])], [Math.max(c0[0], c1[0]), Math.max(c0[1], c1[1]), Math.max(c0[2], c1[2])], mat, part);
+  }
+}
+
+function penroseStair(): Room {
   const m = new Mesh();
   const k = kit(m);
   const pivots: V3[] = [];
-  const WY = -7;            // the pond's surface
-  const B = 3.6;            // the monument's half side
-  const TOP = 5;            // its roof
-  // 0 — the pond, its rocks, lilies and reeds
-  {
-    k.slab(circle(8.6, 24).map(([x, z]) => [x + 0.6, z + 0.6] as [number, number]), WY - 0.3, WY, M.water, 0);
-    const rocks: [number, number, number, number, number][] = [
-      [0, 0, 5.2, 2.6, 1], [4.6, 3.4, 1.9, 1.8, 2], [-3.6, 4.4, 2.1, 1.9, 3], [4.0, -4.2, 1.6, 1.5, 4], [-4.8, -1.6, 1.5, 1.4, 5],
-      [6.4, -0.6, 0.8, 0.7, 6], [-1.0, 6.4, 1.2, 1.0, 7], [6.2, 5.8, 0.7, 0.6, 8],
-    ];
-    for (const [x, z, r, h, sd] of rocks) k.rock([x, WY - 0.1, z], r, h, sd, 0);
-    for (const [x, z, r] of [[5.6, 7.0, 0.36], [-6.2, 5.0, 0.32], [7.2, 2.0, 0.3], [1.2, 8.0, 0.34], [-2.8, 7.6, 0.28]]) {
-      m.lathe([x, WY + 0.01, z], [[0.0001, 0], [r, 0], [r, 0.01], [0.0001, 0.01]], 9, M.leaf, 0);
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2;
-        k.tipped([x + Math.cos(a) * r * 0.35, WY + 0.06, z + Math.sin(a) * r * 0.35], [r * 0.5, 0.03, r * 0.22], 0, 0, -a, M.petal, 0);
-      }
-    }
-    for (const [x, z, h] of [[-6.6, 2.4, 2.0], [-6.3, 2.8, 1.5], [7.4, -3.4, 1.8], [7.0, -3.0, 1.2]]) m.box([x, WY, z], [x + 0.06, WY + h, z + 0.06], M.ink, 0);
-    pivots[0] = [0, WY, 0];
-  }
-  // 1 — the dark monument: tall arched recesses, vines, golden lamps
-  {
-    m.box([-B, WY - 0.5, -B], [B, TOP, B], M.stone, 1);
-    k.band(-B, -B, B, B, TOP - 0.45, 0.12, 1, 0.06, M.trim);
-    for (const u of [-2.6, -0.4]) {
-      k.doorZ(u, -5.2, B, 1.5, 4.2, M.hole, 1);
-      k.doorX(B, -5.2, -u, 1.5, 4.2, M.hole, 1);
-    }
-    k.doorZ(-2.2, 1.0, B, 0.9, 1.9, M.hole, 1);
-    k.vines([-B + 0.1, TOP - 0.5, B], 'z', 2.4, 3.6, 7, 1);
-    k.vines([B, TOP - 0.5, -0.2], 'x', 2.0, 3.0, 11, 1);
-    k.vines([B, TOP - 0.5, B - 0.4], 'x', 1.2, 4.2, 13, 1);
-    pivots[1] = [0, 0, 0];
-  }
-  // 2 — the stair flights up its faces: up the front, a landing at the corner, up the right face to
-  // the back, and back again higher — crossing — to the roof
-  const RISE = 0.28;
-  const flight = (from: V3, axis: 'x' | 'z', dir: number, len: number, rise: number, part: number) => {
-    const n = Math.round(len / 0.46), run = len / n, dy = rise / n;
-    for (let i = 0; i < n; i++) {
-      const a = i * run, b = (i + 1) * run, y = from[1] + (i + 1) * dy;
-      if (axis === 'x') {
-        const x0 = from[0] + dir * a, x1 = from[0] + dir * b;
-        m.box([Math.min(x0, x1), y - 0.5, from[2]], [Math.max(x0, x1), y, from[2] + 1.1], M.accent, part);
-      } else {
-        const z0 = from[2] + dir * a, z1 = from[2] + dir * b;
-        m.box([from[0], y - 0.5, Math.min(z0, z1)], [from[0] + 1.1, y, Math.max(z0, z1)], M.accent, part);
-      }
+  // The ring: four flights round a square, every one of them climbing. It does not close — its last
+  // landing stands (T, T, T) on from where its first flight starts, straight along the line of
+  // sight, so on the screen the two are one. Going round, she climbs for ever.
+  const A = 7.8, H = 0.6, RUN = 0.44, RISE = 0.11, T = 4.4, TH = 0.6;
+  const Y1 = 15 * RISE, Y2 = 30 * RISE, Y3 = 35 * RISE;
+  const P1: V3 = [0, Y1, A], P2: V3 = [A, Y2, A], P3: V3 = [A, Y3, T], P4: V3 = [T, T, T];
+  const landing = (c: V3, part: number, post: [number, number] | null) => {
+    m.box([c[0] - H, c[1] - TH - 0.1, c[2] - H], [c[0] + H, c[1], c[2] + H], M.floor, part);
+    if (post) {
+      const [x, z] = [c[0] + post[0] * (H - 0.12), c[2] + post[1] * (H - 0.12)];
+      m.box([x - 0.08, c[1], z - 0.08], [x + 0.08, c[1] + 0.55, z + 0.08], M.trim, part);
+      m.lathe([x, c[1] + 0.55, z], [[0.0001, 0], [0.11, 0.05], [0.12, 0.13], [0.0001, 0.24]], 8, M.gold, part);
     }
   };
-  const Y0 = -4.6, Y1 = -1.2, Y2 = 2.2;
+  // 0 — the first flight (up the left side) and its landing
+  steps(m, [-H, 0, H], [0, 0, 1], [0, 1, 0], [1, 0, 0], 15, RUN, RISE, 2 * H, M.accent, 0, TH);
+  landing(P1, 0, null);
+  pivots[0] = [0, Y1 / 2, A / 2];
+  // 7 — the second (across the front), 8 — the third (up the right side), 9 — the fourth (along the
+  // back) and the landing that closes the ring
+  steps(m, [H, Y1, A - H], [1, 0, 0], [0, 1, 0], [0, 0, 1], 15, RUN, RISE, 2 * H, M.accent, 7, TH);
+  landing(P2, 7, [1, 1]);
+  pivots[7] = [A / 2, Y1, A];
+  steps(m, [A - H, Y2, A - H], [0, 0, -1], [0, 1, 0], [1, 0, 0], 5, RUN, RISE, 2 * H, M.accent, 8, TH);
+  landing(P3, 8, [1, -1]);
+  pivots[8] = [A, Y2, (A + T) / 2];
+  steps(m, [A - H, Y3, T + H], [-1, 0, 0], [0, 1, 0], [0, 0, -1], 5, RUN, RISE, 2 * H, M.accent, 9, TH);
+  landing(P4, 9, [-1, -1]);
+  pivots[9] = [(A + T) / 2, Y3, T];
+  // 1 — the door she comes out of: a slab standing at the ring's left corner
   {
-    m.box([-B - 1.1, Y0 - 0.5, B], [-B + 0.6, Y0, B + 1.1], M.accent, 2);
-    flight([-B + 0.6, Y0, B], 'x', 1, B - 0.6 + B - 0.6, Y1 - Y0, 2);
-    m.box([B - 0.6, Y1 - 0.5, B - 0.6], [B + 1.1, Y1, B + 1.1], M.accent, 2);
-    flight([B, Y1, B - 0.6], 'z', -1, 2 * B - 1.2, Y2 - Y1, 2);
-    m.box([B, Y2 - 0.5, -B - 1.1], [B + 1.1, Y2, -B + 0.6], M.accent, 2);
-    flight([B, Y2, -B + 0.6], 'z', 1, 2 * B - 1.2, TOP - Y2, 2);
-    m.box([B - 0.6, TOP - 0.5, B - 0.6], [B + 1.1, TOP, B + 1.1], M.accent, 2);
-    void RISE;
-    pivots[2] = [0, 0, 0];
+    const y = Y1;
+    m.box([-1.3, y - TH - 0.1, A - 0.85], [-H, y + 2.5, A + 0.85], M.wall, 1);
+    m.box([-1.4, y + 2.5, A - 0.95], [-H + 0.1, y + 2.75, A + 0.95], M.trim, 1);
+    k.finial([-0.95, y + 2.75, A], 0.8, 1, M.gold);
+    k.doorX(-H, y, A + 0.47, 0.94, 1.75, M.hole, 1);
+    k.frame([-H, y - 0.05, A + 0.62], 'x', 1.24, 2.0, 0.05, M.trim, 1);
+    pivots[1] = [-0.95, y, A];
   }
-  // 3 — the lamps and the rings
+  // 2 — the great block, behind: a stair on each face it shows, each in its own gravity — up its
+  // top to a little house, sideways along its left face to another, straight up its right face
+  const X0 = -9.2, X1 = -4.2, Z0 = -4.8, Z1 = 0.2, BY0 = -1.5, BY1 = 3.5;
   {
-    for (const [x, y] of [[-1.0, -1.6], [1.7, 2.4]]) {
-      k.torus([x, y, B + 0.02], 0.3, 0.09, 'z', M.gold, 3);
-      m.decal([x, y, B], [1, 0, 0], [0, 1, 0], circle(0.22), M.lamp, 3);
-    }
-    for (const [z, y] of [[1.4, -3.0], [-1.6, 0.4]]) {
-      k.torus([B + 0.02, y, z], 0.3, 0.09, 'x', M.gold, 3);
-      m.decal([B, y, z], [0, 0, -1], [0, 1, 0], circle(0.22), M.lamp, 3);
-    }
-    for (const y of [Y1 + 0.7, Y1 + 1.3]) k.torus([B + 0.6, y, B + 1.12], 0.2, 0.06, 'z', M.petal, 3);
-    pivots[3] = [0, 0, 0];
+    m.box([X0, BY0 - 6, Z0], [X1, BY1, Z1], M.stone, 2);
+    k.band(X0, Z0, X1, Z1, BY1 - 0.5, 0.12, 2, 0.05, M.trim);
+    // its top: a stair up to a house, its door at the stair's head
+    steps(m, [X1 - 0.5, BY1, -2.9], [-1, 0, 0], [0, 1, 0], [0, 0, 1], 5, 0.45, 0.3, 1.0, M.accent, 2);
+    const hx = X1 - 0.5 - 5 * 0.45;
+    m.box([X0 + 0.4, BY1, -3.6], [hx, BY1 + 3.2, -1.2], M.wall, 2);
+    m.lathe([(X0 + 0.4 + hx) / 2, BY1 + 3.2, -2.4], [[1.75, 0], [1.4, 0.4], [0.0001, 1.5]], 4, M.roof, 2, Math.PI / 4);
+    k.doorX(hx, BY1 + 1.5, -1.95, 0.7, 1.3, M.hole, 2);
+    // its left face: a stair lying on its side, climbing out of the wall, to a house standing sideways
+    steps(m, [X1 - 0.3, 0.2, Z1], [-1, 0, 0], [0, 0, 1], [0, 1, 0], 8, 0.5, 0.2, 1.1, M.accent, 2);
+    const sx = X1 - 0.3 - 8 * 0.5;
+    m.box([X0, -0.1, Z1], [sx, 1.6, Z1 + 3.0], M.wall, 2);
+    m.decal([sx, 0.18, Z1 + 1.6], [0, 1, 0], [0, 0, 1], archShape(0, 0, 0.75, 1.2), M.hole, 2);
+    // its right face: a stair climbing straight up it
+    steps(m, [X1, -0.4, -3.9], [0, 1, 0], [1, 0, 0], [0, 0, 1], 8, 0.48, 0.2, 1.1, M.accent, 2);
+    k.slitX(X1, 2.4, -0.6, 0.5, 0.9, 2);
+    // a round tower grown out of its far corner, rising over it, domed
+    const tc: V3 = [X0 + 0.4, BY0 - 6, Z0 + 0.4];
+    k.round(tc, 1.7, BY1 + 6.2 - BY0 + 6, M.wall, 2);
+    for (const y of [BY1 + 1.6, BY1 + 4.6]) k.ring([tc[0], y, tc[2]], 1.5, 1.8, 0, 0.14, M.trim, 2);
+    k.ring([tc[0], BY1 + 6.2, tc[2]], 1.2, 2.0, 0, 0.22, M.trim, 2);
+    k.cupola([tc[0], BY1 + 6.42, tc[2]], 1.6, M.roof, 2);
+    k.finial([tc[0], BY1 + 6.42 + 1.6, tc[2]], 0.8, 2, M.gold);
+    for (const [i, y] of [[1, BY1 + 2.4], [3, BY1 + 2.4], [2, BY1 + 5.2]] as [number, number][]) k.onFace(tc, 1.7, 16, i, y, k.archAt(0.5, 1.0), M.hole, 2);
+    pivots[2] = [(X0 + X1) / 2, BY0, (Z0 + Z1) / 2];
   }
-  // 4 — the tower on the roof, and the endless stair round it: round the tower it climbs; behind
-  // the tower, where no one can see, it starts again
-  const TW = 1.4, SW = 1.0, C = TW + SW / 2, HALF = SW / 2;
-  const PER = 7, SR = 0.24, s0 = TOP + 0.4;
-  const runs: { from: V3; dir: V3 }[] = [
-    { from: [-C, 0, -C], dir: [0, 0, 1] },
-    { from: [-C, 0, C], dir: [1, 0, 0] },
-    { from: [C, 0, C], dir: [0, 0, -1] },
-    { from: [C, 0, -C], dir: [-1, 0, 0] },
+  // 3 — a ceiling in the sky, a stair hanging under it upside down to a house hanging upside down
+  {
+    const CY = 10.8;
+    m.box([0.2, CY, -4.6], [6.6, CY + 0.6, -1.8], M.trim, 3);
+    k.inlayZ(0.2, CY + 0.25, -1.8, 6.4, 0.05, 3);
+    steps(m, [0.8, CY, -3.8], [1, 0, 0], [0, -1, 0], [0, 0, 1], 8, 0.46, 0.26, 1.1, M.accent, 3);
+    const ux = 0.8 + 8 * 0.46;
+    m.box([ux, CY - 3.4, -4.4], [6.2, CY, -2.0], M.wall, 3);
+    m.lathe([(ux + 6.2) / 2, CY - 3.4, -3.2], [[1.75, 0], [1.4, -0.4], [0.0001, -1.5]], 4, M.roof, 3, Math.PI / 4);
+    m.decal([5.85, CY - 0.4, -2.0], [-1, 0, 0], [0, -1, 0], archShape(0, 0, 0.8, 1.4), M.hole, 3);
+    pivots[3] = [3.4, CY, -3.2];
+  }
+  // 4 — a tall wall off to the right, a stair lying on its face climbing it, a door at the top
+  {
+    m.box([3.6, -6, -5.6], [9.0, 8.2, -4.8], M.wall, 4);
+    k.cornice(3.6, -5.6, 9.0, -4.8, 8.2, 4, 0.12, M.trim);
+    steps(m, [5.6, -1.6, -4.8], [0, 1, 0], [0, 0, 1], [1, 0, 0], 12, 0.5, 0.16, 1.2, M.accent, 4);
+    k.doorZ(5.75, 4.5, -4.8, 0.9, 1.7, M.hole, 4);
+    k.frame([5.6, 4.45, -4.8], 'z', 1.2, 1.95, 0.05, M.trim, 4);
+    for (const x of [4.2, 7.9]) k.slitZ(x, 1.0, -4.8, 0.3, 2.2, 4);
+    pivots[4] = [6.3, 0, -5.2];
+  }
+  // 5 — little green squares drifting (a day's commits)
+  const cubes: [V3, number][] = [
+    [[-3.2, 6.4, 2.8], 0.42], [[-1.8, 8.6, -0.6], 0.32], [[9.6, 6.2, 1.2], 0.38], [[10.4, 2.0, 4.6], 0.3], [[-6.4, -2.2, 5.6], 0.36],
+    [[2.4, -2.6, 11.0], 0.4], [[11.2, -1.4, 8.2], 0.34], [[-2.6, 2.6, 9.6], 0.3], [[7.6, 12.6, -0.4], 0.32],
   ];
-  const srun = (2 * C - SW) / PER;
-  const corners: V3[] = [];
-  runs.forEach((r, side) => {
-    const base = s0 + side * PER * SR;
-    const c = r.from;
-    m.box([c[0] - HALF, base - 0.34, c[2] - HALF], [c[0] + HALF, base, c[2] + HALF], M.accent, 4);
-    corners.push([c[0], base, c[2]]);
-    for (let i = 0; i < PER; i++) {
-      const s = HALF + i * srun;
-      const p = [c[0] + r.dir[0] * s, c[2] + r.dir[2] * s];
-      const q = [p[0] + r.dir[0] * srun, p[1] + r.dir[2] * srun];
-      const y = base + (i + 1) * SR;
-      const alongX = r.dir[0] !== 0;
-      const lo = alongX ? [Math.min(p[0], q[0]), c[2] - HALF] : [c[0] - HALF, Math.min(p[1], q[1])];
-      const hi = alongX ? [Math.max(p[0], q[0]), c[2] + HALF] : [c[0] + HALF, Math.max(p[1], q[1])];
-      m.box([lo[0], y - 0.34, lo[1]], [hi[0], y, hi[1]], M.accent, 4);
-    }
-  });
-  const yTop = s0 + 4 * PER * SR;
-  m.box([-TW, TOP, -TW], [TW, yTop + 3.4, TW], M.stone, 4);
-  k.band(-TW, -TW, TW, TW, yTop + 1.2, 0.1, 4, 0.05, M.trim);
-  const tc = k.cornice(-TW, -TW, TW, TW, yTop + 3.4, 4, 0.12, M.trim);
-  k.crenels(-TW - 0.12, -TW - 0.12, TW + 0.12, TW + 0.12, tc, 4, 0.3);
-  const yFL = s0 + PER * SR;
-  k.doorZ(-0.95, yFL + 0.55, TW, 0.62, 1.15, M.hole, 4);
-  k.slitX(TW, yTop - 1.2, -0.1, 0.22, 0.9, 4);
-  k.slitZ(0.4, yTop + 1.6, TW, 0.22, 0.7, 4);
-  k.vines([-TW + 0.05, yTop + 3.2, TW], 'z', 2.6, 2.2, 21, 4);
-  pivots[4] = [0, TOP, 0];
-  // 5 — the pale tower behind, rising higher, with vines and arches
+  for (const [c, sz] of cubes) m.box([c[0] - sz, c[1] - sz, c[2] - sz], [c[0] + sz, c[1] + sz, c[2] + sz], M.leaf, 5);
+  pivots[5] = [0, 4, 0];
+  // 6 — two others, each in their own gravity: one walking the block's left face, one under the ceiling
   {
-    const x0 = -9.2, z0 = -9.2, w = 2.4, top = yTop + 6;
-    m.box([x0, WY - 0.5, z0], [x0 + w, top, z0 + w], M.trim, 5);
-    for (const y of [0.0, 6.0, top - 3.6]) {
-      k.doorZ(x0 + 0.7, y, z0 + w, 1.0, 2.2, M.hole, 5);
-      k.doorX(x0 + w, y, z0 + w - 0.7, 1.0, 2.2, M.hole, 5);
-    }
-    k.vines([x0 + 0.1, top - 0.4, z0 + w], 'z', 2.2, 4.0, 5, 5);
-    k.vines([x0 + w, top - 0.4, z0 + w - 0.1], 'x', 2.2, 3.0, 9, 5);
-    pivots[5] = [x0 + w / 2, 0, z0 + w / 2];
+    const from = m.data.length;
+    cloaked(m, [0, 0, 0], M.petal, 6);
+    place(m.data, from, Math.PI / 2, 0, 0, [X1 - 2.2, 0.75, Z1 + 0.8]);
+    const from2 = m.data.length;
+    cloaked(m, [0, 0, 0], M.petal, 6);
+    place(m.data, from2, Math.PI, 0, 0, [0.8 + 4.5 * 0.46, 10.8 - 5 * 0.26, -3.25]);
+    pivots[6] = [0, 5, 0];
   }
-  // 6 — small rocks drifting in the air
-  k.rock([7.4, 1.2, -2.4], 0.5, 0.55, 8, 6);
-  k.rock([-6.4, 4.6, 2.6], 0.4, 0.45, 9, 6);
-  k.rock([5.6, 9.6, 2.0], 0.32, 0.35, 10, 6);
-  pivots[6] = [0, 3, 0];
-  const door: V3 = [-0.64, yFL + 0.55, TW + 0.05];
-  const onStair: V3 = [-0.64, yFL + 0.55, C];
+  // Off across the page: 10 — a round tower with a stair winding round it to its dome; 11 — a gate of
+  // two round towers bridged at the top; 12 — a great ring standing on an island, a stair through
+  // it; 13 — a floating wall with a stair lying on its face
+  {
+    const c = seen(-15.0, 1.4, -1.0);
+    islet(m, c, 2.8, 10, 3, M.floor);
+    k.round(c, 1.1, 8.2, M.wall, 10);
+    k.spiral(c, 1.1, 2.0, 0.6, Math.PI / 7, 30, 0.26, M.accent, 10);
+    k.ring([c[0], c[1] + 8.2, c[2]], 0.8, 1.5, 0, 0.2, M.trim, 10);
+    k.cupola([c[0], c[1] + 8.4, c[2]], 1.2, M.roof, 10);
+    for (const [i, y] of [[0, 0.0], [2, 3.4], [1, 6.2]] as [number, number][]) k.onFace(c, 1.1, 16, i, c[1] + y, k.archAt(0.45, y ? 0.9 : 1.4), M.hole, 10);
+    pivots[10] = c;
+  }
+  {
+    // two round towers, an arched bridge between their tops, a dome on each
+    const c = seen(-21.0, -6.6, -4.0);
+    for (const dz of [-3.2, 3.2]) {
+      const t: V3 = [c[0], c[1], c[2] + dz];
+      k.round(t, 1.0, 9.0, M.wall, 11);
+      k.ring([t[0], t[1] + 4.0, t[2]], 0.8, 1.1, 0, 0.14, M.trim, 11);
+      k.ring([t[0], t[1] + 9.0, t[2]], 0.7, 1.3, 0, 0.2, M.trim, 11);
+      k.cupola([t[0], t[1] + 9.2, t[2]], 1.0, M.roof, 11);
+      k.onFace(t, 1.0, 16, 1, t[1] + 5.4, k.archAt(0.4, 0.9), M.hole, 11);
+    }
+    m.box([c[0] - 0.6, c[1] + 7.2, c[2] - 2.6], [c[0] + 0.6, c[1] + 7.6, c[2] + 2.6], M.floor, 11);
+    k.bridge('z', c[2] - 2.3, c[2] + 2.3, c[0] - 0.55, c[0] + 0.55, c[1] + 7.2, 1.8, 0.25, M.wall, 11);
+    pivots[11] = [c[0], c[1] + 4, c[2]];
+  }
+  {
+    const c = seen(-23.6, 5.0, -1.2);
+    islet(m, c, 3.0, 12, 7, M.floor);
+    k.torus([c[0], c[1] + 2.6, c[2]], 2.3, 0.32, 'x', M.roof, 12);
+    steps(m, [c[0] - 2.4, c[1], c[2] - 0.6], [1, 0, 0], [0, 1, 0], [0, 0, 1], 4, 0.5, 0.25, 1.2, M.accent, 12);
+    steps(m, [c[0] + 2.4, c[1], c[2] + 0.6], [-1, 0, 0], [0, 1, 0], [0, 0, -1], 4, 0.5, 0.25, 1.2, M.accent, 12);
+    m.box([c[0] - 0.4, c[1], c[2] - 0.6], [c[0] + 0.4, c[1] + 1.0, c[2] + 0.6], M.accent, 12);
+    pivots[12] = c;
+  }
+  {
+    const c = seen(-11.8, -8.8, 5.0);
+    m.box([c[0] - 0.3, c[1] - 3.2, c[2] - 1.8], [c[0] + 0.3, c[1] + 2.2, c[2] + 1.8], M.stone, 13);
+    steps(m, [c[0] + 0.3, c[1] - 3.2, c[2] - 0.6], [0, 1, 0], [1, 0, 0], [0, 0, 1], 9, 0.6, 0.16, 1.2, M.accent, 13);
+    m.box([c[0] - 0.5, c[1] + 2.2, c[2] - 1.9], [c[0] + 0.5, c[1] + 2.45, c[2] + 1.9], M.trim, 13);
+    pivots[13] = c;
+  }
+  const J = 1.8, YJ = ((J - H) / RUN) * RISE + RISE / 2;
   return {
     id: 'activity',
     mesh: new Float32Array(m.data),
     solids: m.solids(),
     pivots,
-    parts: 7,
+    parts: 14,
+    distant: { 10: 0.22, 11: 0.38, 12: 0.32, 13: 0.3 },
     assembly: [
-      { part: 0, at: 0, from: [0, -2, 0], fade: true, dur: 0.9 },
-      { part: 1, at: 0.2, from: [0, -5, 0], fade: true, dur: 1.1 },
-      { part: 5, at: 0.3, from: [0, -6, 0], fade: true, dur: 1.2 },
-      { part: 2, at: 0.6, from: [0, 0, 0], fade: true, dur: 0.9 },
-      { part: 4, at: 0.75, from: [0, 4, 0], fade: true, dur: 1.0 },
-      { part: 3, at: 1.15, from: [0, 0, 0], fade: true, dur: 0.6 },
-      { part: 6, at: 0.9, from: [0, 1.5, 0], fade: true, dur: 0.8 },
+      { part: 2, at: 0, from: [0, -4, 0], fade: true, dur: 1.0 },
+      { part: 4, at: 0.15, from: [0, -5, 0], fade: true, dur: 1.0 },
+      { part: 3, at: 0.3, from: [0, 3, 0], fade: true, dur: 1.0 },
+      { part: 0, at: 0.4, from: [0, -3, 0], fade: true, dur: 0.9 },
+      { part: 1, at: 0.6, from: [0, -2, 0], fade: true, dur: 0.8 },
+      { part: 7, at: 0.6, from: [3, 0, 0], fade: true, dur: 0.9 },
+      { part: 8, at: 0.8, from: [0, 0, -3], fade: true, dur: 0.9 },
+      { part: 9, at: 1.0, from: [-3, 0, 0], fade: true, dur: 0.9 },
+      { part: 5, at: 0.9, from: [0, 1.2, 0], fade: true, dur: 0.9 },
+      { part: 6, at: 1.3, from: [0, 0, 0], fade: true, dur: 0.6 },
+      { part: 10, at: 0.3, from: [0, -4, 0], fade: true, dur: 1.2 },
+      { part: 11, at: 0.5, from: [0, -4, 0], fade: true, dur: 1.1 },
+      { part: 12, at: 0.6, from: [0, -3, 0], fade: true, dur: 1.1 },
+      { part: 13, at: 0.8, from: [0, 2, 0], fade: true, dur: 1.0 },
     ],
-    walk: [door, onStair],
-    loop: [onStair, corners[2], corners[3], [-C, yTop, -C], corners[0], corners[1], onStair],
-    speed: 0.55,
+    walk: [[-H + 0.05, Y1, A], [0, Y1, A]],
+    // round the ring; at the last landing on along the first flight's line, then the step along
+    // the line of sight back onto it (no one can see it)
+    loop: [[0, Y1, A], P2, P3, P4, [T, T + YJ, T + J], [0, YJ, J], [0, Y1, A]],
+    speed: 0.6,
     glows: [
-      { at: [-1.0, -1.6, B + 0.1], r: 1.1, mat: M.lamp },
-      { at: [1.7, 2.4, B + 0.1], r: 1.1, mat: M.lamp },
-      { at: [B + 0.1, -3.0, 1.4], r: 1.1, mat: M.lamp },
-      { at: [B + 0.1, 0.4, -1.6], r: 1.1, mat: M.lamp },
+      { at: [-0.7, Y1 + 1.0, A], r: 0.9, mat: M.lamp },
+      { at: [hxOf(), BY1 + 2.1, -2.0], r: 0.8, mat: M.lamp },
+      { at: [5.4, 9.6, -1.9], r: 0.8, mat: M.lamp },
     ],
-    pose: (part, _since, t) => (part === 6 ? { off: [0, bob(t, 0.2, 7), 0] } : {}),
+    pose: (part, _since, t) => (part === 5 || part === 13 ? { off: [0, bob(t, 0.2, 6.5 + part * 0.3, part), 0] } : {}),
+    puffs: (pal, t) =>
+      [[-2.4, -3.6, 6.2], [4.2, -3.2, 9.6], [9.8, -3.8, 4.4], [1.0, -4.4, 2.0], [-6.6, -4.0, 2.8], [6.8, -4.4, -1.6]].map(([x, y, z], i) => ({
+        at: [x + bob(t, 0.3, 12, i), y, z] as V3,
+        r: 2.6 + (i % 3) * 0.6,
+        color: top(pal, M.trim),
+        a: 0.4,
+      })),
   };
+  function hxOf() {
+    return X1 - 0.5 - 5 * 0.45;
+  }
 }
 
 /* ───────────── Contact: the Violet Tree ───────────── */
@@ -838,12 +1123,16 @@ function violetTree(): Room {
   // 5 — the tree's slender column, on three legs, with its pot
   const TX = -1.6, TZ = 6.6, PT = 3.8;
   {
-    m.box([TX - 0.55, -3.2, TZ - 0.55], [TX + 0.55, PT, TZ + 0.55], M.stone, 5);
-    k.band(TX - 0.55, TZ - 0.55, TX + 0.55, TZ + 0.55, PT - 0.5, 0.1, 5, 0.05, M.trim);
-    for (const [x, z] of [[TX - 0.55, TZ - 0.55], [TX + 0.35, TZ - 0.55], [TX - 0.55, TZ + 0.35]]) m.box([x, BOT, z], [x + 0.2, -3.2, z + 0.2], M.stone, 5);
-    m.box([TX + 0.35, BOT, TZ + 0.35], [TX + 0.55, -3.2, TZ + 0.55], M.stone, 5);
-    k.doorZ(TX - 0.25, -1.4, TZ + 0.55, 0.5, 1.3, M.hole, 5);
-    k.slitX(TX + 0.55, 0.9, TZ + 0.1, 0.2, 0.7, 5);
+    const tc: V3 = [TX, -3.2, TZ];
+    k.round(tc, 0.62, PT + 3.2, M.stone, 5);
+    k.ring([TX, PT - 0.5, TZ], 0.5, 0.7, 0, 0.1, M.trim, 5);
+    k.ring([TX, -3.2, TZ], 0.4, 0.78, 0, 0.3, M.trim, 5);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      m.lathe([TX + 0.45 * Math.cos(a), BOT, TZ + 0.45 * Math.sin(a)], [[0.0001, 0], [0.11, 0], [0.11, BOT * -1 - 3.2], [0.0001, BOT * -1 - 3.2]], 8, M.stone, 5);
+    }
+    k.onFace(tc, 0.62, 16, 4, -1.4, k.archAt(0.5, 1.3), M.hole, 5);
+    k.onFace(tc, 0.62, 16, 0, 0.9, rect(-0.1, 0, 0.2, 0.7), M.hole, 5);
     m.lathe([TX, PT, TZ], [[0.34, 0], [0.5, 0.46], [0.55, 0.56], [0.0001, 0.56]], 10, M.accent, 5);
     pivots[5] = [TX, 0, TZ];
   }
@@ -874,9 +1163,55 @@ function violetTree(): Room {
   k.frame([-4.8, 10.6, -1.8], 'z', 1.0, 2.6, 0.03, M.line, 14);
   k.frame([-1.2, 12.2, -2.2], 'z', 0.7, 1.8, 0.03, M.line, 14);
   pivots[14] = [0, 8, 0];
+  // Off across the page: 15 — the aqueduct going on to the left, lower, to a round domed tower;
+  // 16 — another cube-leaved tree on its island; 17 — a lilac rotunda; 18 — rings and frames
+  // floating
+  {
+    const top = LY - 1.2, x0 = -22.0, x1 = -10.5;
+    m.extrude(arches(x0, x1, 4, top - 0.6, top - 4.6), 'xy', Z0, Z1, M.stone, 15, true);
+    m.box([x0, top - 0.6, Z0], [x1, top, Z1], M.floor, 15);
+    k.parapet('x', x0, x1, top, Z0, 15, 0.22);
+    k.parapet('x', x0, x1, top, Z1 - 0.22, 15, 0.22);
+    k.inlayZ(x0, top - 1.4, Z1, x1 - x0, 0.05, 15);
+    const tc: V3 = [x0 - 1.4, BOT, (Z0 + Z1) / 2];
+    k.round(tc, 1.7, top + 4.0 - BOT, M.stone, 15);
+    for (const y of [top - 0.6, top + 2.2]) k.ring([tc[0], y, tc[2]], 1.5, 1.82, 0, 0.14, M.trim, 15);
+    k.ring([tc[0], top + 4.0, tc[2]], 1.2, 2.0, 0, 0.22, M.trim, 15);
+    k.cupola([tc[0], top + 4.22, tc[2]], 1.65, M.dome, 15);
+    k.finial([tc[0], top + 4.22 + 1.65, tc[2]], 0.8, 15, M.gold);
+    for (const [i, y] of [[0, top], [1, top + 2.6], [3, top - 3.0]] as [number, number][]) k.onFace(tc, 1.7, 16, i, y, k.archAt(0.6, y === top ? 1.5 : 1.0), M.hole, 15);
+    pivots[15] = [(x0 + x1) / 2, top, -0.6];
+  }
+  {
+    const c = seen(-16.0, 4.6, -1.6);
+    islet(m, c, 2.8, 16, 4);
+    k.round(c, 0.45, 2.4, M.stone, 16);
+    m.lathe([c[0], c[1] + 2.4, c[2]], [[0.25, 0], [0.4, 0.34], [0.42, 0.42], [0.0001, 0.42]], 10, M.accent, 16);
+    m.box([c[0] - 0.08, c[1] + 2.8, c[2] - 0.08], [c[0] + 0.08, c[1] + 4.0, c[2] + 0.08], M.wood, 16);
+    for (const [d, sz, a] of [[[0.2, 4.6, -0.3], 1.1, [0.3, 0.2, 0.5]], [[-0.9, 4.1, 0.4], 0.85, [0.5, -0.3, 0.2]], [[0.9, 4.0, 0.6], 0.75, [-0.2, 0.4, 0.9]], [[-0.2, 5.3, 0.6], 0.7, [0.6, 0.1, -0.4]]] as [V3, number, V3][]) {
+      k.tipped([c[0] + d[0], c[1] + d[1], c[2] + d[2]], [sz, sz, sz], a[0], a[1], a[2], M.petal, 16);
+    }
+    pivots[16] = c;
+  }
+  {
+    const c = seen(-22.6, 9.8, -2.2);
+    islet(m, c, 2.6, 17, 6);
+    k.rotunda(c, 1.5, 2.4, 8, 17);
+    pivots[17] = c;
+  }
+  for (const [sx, sy, y] of [[-12.4, -4.0, 4.0], [-19.0, -1.0, 5.0], [-25.0, 2.6, 2.0]]) {
+    const c = seen(sx, sy, y);
+    k.torus(c, 0.42, 0.08, 'z', M.gold, 18);
+    k.frame([c[0] - 0.5, c[1] - 2.2, c[2] - 0.6], 'z', 1.0, 1.6, 0.03, M.line, 18);
+  }
+  pivots[18] = seen(-18, -1, 4);
   const assembly: Assembly[] = [
     { part: 0, at: 0, from: [0, -5, 0], fade: true, dur: 1.1 },
     { part: 1, at: 0.3, from: [0, 2.5, 0], fade: true, dur: 0.9 },
+    { part: 15, at: 0.35, from: [0, -4, 0], fade: true, dur: 1.2 },
+    { part: 16, at: 0.6, from: [0, -3, 0], fade: true, dur: 1.1 },
+    { part: 17, at: 0.7, from: [0, -3, 0], fade: true, dur: 1.1 },
+    { part: 18, at: 1.1, from: [0, 1.2, 0], fade: true, dur: 0.8 },
     { part: 4, at: 0.4, from: [0, -4, 0], fade: true, dur: 1.0 },
     { part: 5, at: 0.5, from: [0, -4, 0], fade: true, dur: 1.0 },
     { part: 2, at: 0.55, from: [0, 0, 0], fade: true, dur: 0.8 },
@@ -890,7 +1225,8 @@ function violetTree(): Room {
     mesh: new Float32Array(m.data),
     solids: m.solids(),
     pivots,
-    parts: 15,
+    parts: 19,
+    distant: { 15: 0.18, 16: 0.3, 17: 0.36, 18: 0.3 },
     assembly,
     walk: [[-9.4, LY, -0.6], [-7.6, LY, -0.6], ...[-7.0, -6.4, -5.8, -5.2, -4.6, -4.0].map((x) => [x, rampY(x), -0.6] as V3), [-3.2, DECK, -0.6], [-1.6, DECK, -0.6]],
     speed: 0.9,
@@ -901,6 +1237,7 @@ function violetTree(): Room {
     ],
     pose: (part, _since, t) => {
       if (part === 3) return { ry: t * 0.7 };
+      if (part === 18) return { off: [0, bob(t, 0.16, 7.5, 2), 0] };
       if (part >= 7 && part <= 13) {
         const i = part - 7;
         return { off: [0, bob(t, 0.07, 5 + i * 0.7, i), 0], ry: bob(t, 0.05, 9 + i, i) };
@@ -923,5 +1260,5 @@ function violetTree(): Room {
 }
 
 export function buildRooms(): Room[] {
-  return [lotusPalace(), nightWindow(), amberSky(), endlessStair(), violetTree()];
+  return [lotusPalace(), moonRuins(), amberSky(), penroseStair(), violetTree()];
 }

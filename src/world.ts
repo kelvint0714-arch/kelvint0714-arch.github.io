@@ -8,7 +8,7 @@
 // the front block (Activity); a pavilion floats below (Contact). A white traveller walks between them.
 
 import { Mesh, rect, type Solid, type V3 } from './geometry';
-import { kit, M } from './kit';
+import { islet, kit, M, seen } from './kit';
 
 export { M };
 
@@ -33,8 +33,14 @@ export const P = {
   backL: 16,
   backR: 17,
   star: 18,
+  farGate: 19,
+  farRotunda: 20,
+  farShrine: 21,
+  farIsles: 22,
 } as const;
-export const PART_COUNT = 19;
+export const PART_COUNT = 23;
+/** The far city, behind the page's words: its parts and how hazed. */
+export const FAR: Record<number, number> = { 19: 0.55, 20: 0.5, 21: 0.58, 22: 0.5 };
 /** The impossible triangle's parts: its three sides, and the corner that closes it. */
 export const PENROSE: number[] = [P.penrose, P.penB, P.penC, P.penK];
 
@@ -63,6 +69,8 @@ export interface World {
   tether: { from: V3; to: V3 };
   /** The point the triangle turns about (its axis runs along the line of sight through it). */
   spin: V3;
+  /** Parts off in the distance, behind the page's words (not framed), and how hazed. */
+  distant: Record<number, number>;
 }
 
 export function buildWorld(): World {
@@ -334,6 +342,52 @@ export function buildWorld(): World {
     },
   ];
 
+  /* ── far off, behind the page's words: a city gate of two round towers bridged high; a rotunda on
+     an island; a stepped shrine with a domed drum on top; small islands drifting ── */
+  {
+    const c = seen(-27.5, -0.6, -7);
+    for (const dz of [-3.3, 3.3]) {
+      const t: V3 = [c[0], c[1], c[2] + dz];
+      k.round(t, 1.3, 13, M.stone, P.farGate);
+      for (const y of [5, 9.6]) k.ring([t[0], t[1] + y, t[2]], 1.1, 1.42, 0, 0.16, M.trim, P.farGate);
+      k.ring([t[0], t[1] + 13, t[2]], 1.0, 1.6, 0, 0.24, M.trim, P.farGate);
+      k.cone([t[0], t[1] + 13.24, t[2]], 1.5, 3.0, M.dome, P.farGate);
+      k.onFace(t, 1.3, 16, 1, t[1] + 7.0, k.archAt(0.5, 1.1), M.hole, P.farGate);
+    }
+    m.box([c[0] - 0.7, c[1] + 10.2, c[2] - 2.4], [c[0] + 0.7, c[1] + 10.7, c[2] + 2.4], M.floor, P.farGate);
+    k.bridge('z', c[2] - 2.2, c[2] + 2.2, c[0] - 0.65, c[0] + 0.65, c[1] + 10.2, 2.2, 0.3, M.stone, P.farGate);
+    pivots[P.farGate] = [c[0], c[1] + 6, c[2]];
+  }
+  {
+    const c = seen(-20.0, 11.2, -3);
+    islet(m, c, 3.2, P.farRotunda, 4);
+    k.rotunda(c, 1.9, 3.0, 10, P.farRotunda);
+    pivots[P.farRotunda] = c;
+  }
+  {
+    const c = seen(-32.0, 7.8, -5);
+    islet(m, c, 4.2, P.farShrine, 7);
+    for (let i = 0; i < 3; i++) {
+      const h = 2.8 - i * 0.9;
+      m.box([c[0] - h, c[1] + i * 0.9, c[2] - h], [c[0] + h, c[1] + (i + 1) * 0.9, c[2] + h], M.stone, P.farShrine);
+    }
+    steps(c[0] + 2.8, c[1], c[2]);
+    k.round([c[0], c[1] + 2.7, c[2]], 0.8, 1.4, M.trim, P.farShrine);
+    k.cupola([c[0], c[1] + 4.1, c[2]], 0.95, M.dome, P.farShrine);
+    k.finial([c[0], c[1] + 5.05, c[2]], 0.7, P.farShrine);
+    pivots[P.farShrine] = c;
+    function steps(x: number, y: number, z: number) {
+      for (let i = 0; i < 6; i++) m.box([x, y, z - 0.5], [x + 1.6 - i * 0.27, y + (i + 1) * 0.45, z + 0.5], M.floor, P.farShrine);
+    }
+  }
+  for (const [sx, sy, y, r] of [[-16.5, -9.6, 2, 1.5], [-14.6, 12.4, -4, 1.3]]) {
+    const c = seen(sx, sy, y);
+    islet(m, c, r, P.farIsles, sx + sy);
+    k.round(c, r * 0.42, r * 0.7, M.stone, P.farIsles);
+    k.cupola([c[0], c[1] + r * 0.7, c[2]], r * 0.48, M.dome, P.farIsles);
+  }
+  pivots[P.farIsles] = seen(-22, -2, 0);
+
   return {
     mesh: new Float32Array(m.data),
     culledFrom,
@@ -343,5 +397,6 @@ export function buildWorld(): World {
     solids: m.solids(),
     tether: { from: [mid, HP + 0.02, mid], to: [mid, H, mid] },
     spin,
+    distant: FAR,
   };
 }
