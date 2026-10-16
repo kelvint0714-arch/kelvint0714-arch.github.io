@@ -162,7 +162,7 @@ const ROOMS: Record<string, [Palette, Palette]> = {
       sky: ['#f6fcf1', '#c9ece0'],
       glow: '#fff3d2',
       dust: '#ffffff',
-      fog: [-8, -3],
+      fog: [-12.5, -6.5],
       mats: {
         stone: mat('#fde3cc', '#f3bdd0', '#8ea5e7', { mist: true }),
         trim: mat('#fff0de', '#f7cddc', '#a3b6ee', { mist: true }),
@@ -186,7 +186,7 @@ const ROOMS: Record<string, [Palette, Palette]> = {
       sky: ['#4d4a7c', '#1a1834'],
       glow: '#ffe0a6',
       dust: '#ffe9f2',
-      fog: [-8, -3],
+      fog: [-12.5, -6.5],
       mats: {
         stone: mat('#ecc9d9', '#b98cc0', '#5b5f9d', { mist: true }),
         trim: mat('#f4d8e3', '#c99bcc', '#6b70ac', { mist: true }),
@@ -299,7 +299,7 @@ const ROOMS: Record<string, [Palette, Palette]> = {
       r: 1.15,
       glow: '#ffe066',
       dust: '#f4fff0',
-      fog: [-5, -2],
+      fog: [-10, -5.5],
       mats: {
         stone: mat('#2f7068', '#143936', '#0d2826', { mist: true }),
         floor: mat('#3b847b', '#174340', '#0f2e2b', { tiles: true }),
@@ -322,7 +322,7 @@ const ROOMS: Record<string, [Palette, Palette]> = {
       r: 1.15,
       glow: '#ffe066',
       dust: '#d9ffe6',
-      fog: [-5, -2],
+      fog: [-10, -5.5],
       mats: {
         stone: mat('#295f59', '#0f2b29', '#081c1a', { mist: true }),
         floor: mat('#357269', '#123632', '#0b2421', { tiles: true }),
@@ -347,7 +347,7 @@ const ROOMS: Record<string, [Palette, Palette]> = {
       at: [0.45, 0.3],
       glow: '#ffd7ad',
       dust: '#ffffff',
-      fog: [-7, -2.5],
+      fog: [-10, -4.5],
       mats: {
         stone: mat('#dfcaf5', '#b593e1', '#8163bd', { mist: true }),
         floor: mat('#e8d6f8', '#bf9fe6', '#8a6cc4', { tiles: true }),
@@ -367,7 +367,7 @@ const ROOMS: Record<string, [Palette, Palette]> = {
       at: [0.45, 0.3],
       glow: '#ffcf9e',
       dust: '#ffd6e6',
-      fog: [-7, -2.5],
+      fog: [-10, -4.5],
       mats: {
         stone: mat('#b98fda', '#8c5bc4', '#583892', { mist: true }),
         floor: mat('#c4a0e0', '#9568ca', '#62409b', { tiles: true }),
