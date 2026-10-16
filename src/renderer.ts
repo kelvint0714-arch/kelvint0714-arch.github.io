@@ -1,8 +1,8 @@
 // The valley's renderer: WebGL2, no libraries. An isometric (orthographic) camera; every face takes
 // one of its material's three tones — top, left-facing, right-facing — the way Monument Valley's
 // stone is lit; walls brighten a touch towards the top, slabs show faint seams, and anything low
-// enough melts into the mist (the sky behind it). Glows get a soft additive halo; dust drifts in
-// the sky.
+// enough melts into the mist (the sky behind it). Each building brings its own colours. On top:
+// soft halos round lights, beams of light, clouds, and dust drifting in the sky.
 
 import { STRIDE, type V3 } from './geometry';
 
@@ -16,6 +16,9 @@ export interface Material {
   tiles?: boolean;
   /** Melts into the mist below the fog line. */
   mist?: boolean;
+  /** Unlit: a vertical gradient from `right` (at grad[0]) up to `top` (at grad[1]), whatever way
+   * the face turns (a night sky seen through a window). */
+  grad?: [number, number];
 }
 
 export interface Palette {
@@ -42,13 +45,29 @@ export interface View {
 
 export interface Glow {
   at: V3;
-  /** Halo radius in world units, and strength 0–1. */
+  /** Halo radius in world units, strength 0–1, and colour (the palette's glow if not given). */
   r: number;
+  a: number;
+  color?: RGB;
+}
+
+/** A shaft of light: a quad from its source edge (a, b) out to (c, d), fading as it goes. */
+export interface Beam {
+  quad: [V3, V3, V3, V3];
+  color: RGB;
+  a: number;
+}
+
+/** A soft cloud: a disc of colour laid over the scene. */
+export interface Puff {
+  at: V3;
+  r: number;
+  color: RGB;
   a: number;
 }
 
 export const MAX_PARTS = 24;
-export const MAX_MATS = 16;
+export const MAX_MATS = 24;
 
 // Screen axes of the isometric camera (it looks from +x +y +z towards the origin).
 const R: V3 = [Math.SQRT1_2, 0, -Math.SQRT1_2];
@@ -126,30 +145,37 @@ flat in int vPart;
 uniform vec3 uTop[${MAX_MATS}];
 uniform vec3 uLeft[${MAX_MATS}];
 uniform vec3 uRight[${MAX_MATS}];
-uniform vec2 uMatFx[${MAX_MATS}];   // x: slab seams, y: melts into the mist
-uniform vec4 uPartFx[${MAX_PARTS}]; // x: presence (0 = still in the mist), y: lit (hovered / opened)
+uniform vec4 uMatFx[${MAX_MATS}];   // x: slab seams, y: melts into the mist, z: gradient, w: unused
+uniform vec2 uMatGrad[${MAX_MATS}];
+uniform vec4 uPartFx[${MAX_PARTS}]; // x: presence (0 = still in the mist), y: lit (hovered)
 uniform vec2 uFog;
 uniform vec3 uGlow;
 ${SKY}
 out vec4 outColor;
 void main() {
   vec3 n = normalize(vN);
-  // Faces turned away (seen through a gap) take the darkest tone.
-  vec3 w = max(n, 0.0);
-  float s = w.x + w.y + w.z;
-  vec3 c = s > 1e-3 ? (uTop[vMat] * w.y + uLeft[vMat] * w.z + uRight[vMat] * w.x) / s : uRight[vMat] * 0.9;
-  // Walls lighten a little towards the top (the light falls from above).
-  c *= mix(1.0, 0.94 + 0.08 * smoothstep(-6.0, 12.0, vW.y), 1.0 - w.y / max(s, 1e-3));
-  vec2 fx = uMatFx[vMat];
-  if (fx.x > 0.0 && n.y > 0.9) {
-    // Slab seams: a faint line on every whole unit.
-    vec2 g = abs(fract(vW.xz) - 0.5);
-    vec2 fw = fwidth(vW.xz) * 1.5;
-    float seam = max(smoothstep(0.5 - fw.x, 0.5, g.x), smoothstep(0.5 - fw.y, 0.5, g.y));
-    c *= 1.0 - 0.06 * seam;
+  vec4 fx = uMatFx[vMat];
+  vec3 c;
+  if (fx.z > 0.0) {
+    vec2 g = uMatGrad[vMat];
+    c = mix(uRight[vMat], uTop[vMat], smoothstep(g.x, g.y, vW.y));
+  } else {
+    // Faces turned away (seen through a gap) take the darkest tone.
+    vec3 w = max(n, 0.0);
+    float s = w.x + w.y + w.z;
+    c = s > 1e-3 ? (uTop[vMat] * w.y + uLeft[vMat] * w.z + uRight[vMat] * w.x) / s : uRight[vMat] * 0.9;
+    // Walls lighten a little towards the top (the light falls from above).
+    c *= mix(1.0, 0.94 + 0.08 * smoothstep(-6.0, 12.0, vW.y), 1.0 - w.y / max(s, 1e-3));
+    if (fx.x > 0.0 && n.y > 0.9) {
+      // Slab seams: a faint line on every whole unit.
+      vec2 g = abs(fract(vW.xz) - 0.5);
+      vec2 fw = fwidth(vW.xz) * 1.5;
+      float seam = max(smoothstep(0.5 - fw.x, 0.5, g.x), smoothstep(0.5 - fw.y, 0.5, g.y));
+      c *= 1.0 - 0.06 * seam;
+    }
   }
   vec4 pf = uPartFx[vPart];
-  // A lit part (hovered, or the station opened): a soft lift towards the glow.
+  // A lit part (hovered): a soft lift towards the glow.
   c = mix(c, c + uGlow * 0.12, pf.y);
   vec3 bg = sky(cssPx());
   float a = pf.x * (fx.y > 0.0 ? smoothstep(uFog.x, uFog.y, vW.y) : 1.0);
@@ -207,34 +233,76 @@ void main() {
   outColor = vec4(uDust * a, a);
 }`;
 
-// Halos round the glows: screen-aligned quads, added on.
-const HALO_VS = /* glsl */ `#version 300 es
+// Halos and clouds: screen-aligned discs at world points. Halos are added on (light); clouds are
+// laid over (premultiplied colour and coverage).
+const DISC_VS = /* glsl */ `#version 300 es
 layout(location = 0) in vec3 aAt;
 layout(location = 1) in vec2 aCorner;   // −1…1
 layout(location = 2) in vec2 aRA;       // radius (world units), strength
+layout(location = 3) in vec3 aColor;
 uniform vec2 uRes;
+uniform float uCloud;
 ${CAMERA}
 out vec2 vUv;
 out float vA;
+out vec3 vColor;
 void main() {
   vec4 c = clipOf(aAt, uRes);
   vA = aRA.y;
   vUv = aCorner;
-  c.xy += aCorner * aRA.x * uS / uRes * 2.0;
+  vColor = aColor;
+  // (clouds are wider than they are tall)
+  c.xy += aCorner * aRA.x * uS / uRes * 2.0 * (uCloud > 0.5 ? vec2(1.8, 1.0) : vec2(1.0));
   c.z = -1.0;
   gl_Position = c;
 }`;
 
-const HALO_FS = /* glsl */ `#version 300 es
+const DISC_FS = /* glsl */ `#version 300 es
 precision mediump float;
 in vec2 vUv;
 in float vA;
-uniform vec3 uGlow;
+in vec3 vColor;
+uniform highp float uCloud;
 out vec4 outColor;
 void main() {
   float r = length(vUv);
-  float a = exp(-r * r * 4.0) * (1.0 - smoothstep(0.85, 1.0, r)) * vA;
-  outColor = vec4(uGlow * a, 0.0);
+  if (uCloud > 0.5) {
+    // A cloud: soft all the way out, so many of them melt into one bank.
+    float q = max(0.0, 1.0 - r * r);
+    float a = q * q * vA;
+    outColor = vec4(vColor * a, a);
+  } else {
+    float a = exp(-r * r * 4.0) * (1.0 - smoothstep(0.85, 1.0, r)) * vA;
+    outColor = vec4(vColor * a, 0.0);
+  }
+}`;
+
+// Beams of light: quads in the world, bright at their source and fading out, soft at their sides.
+const BEAM_VS = /* glsl */ `#version 300 es
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec2 aUv;
+layout(location = 2) in vec4 aColor;
+uniform vec2 uRes;
+${CAMERA}
+out vec2 vUv;
+out vec4 vColor;
+void main() {
+  vUv = aUv;
+  vColor = aColor;
+  gl_Position = clipOf(aPos, uRes);
+  gl_Position.z = -1.0;
+}`;
+
+const BEAM_FS = /* glsl */ `#version 300 es
+precision mediump float;
+in vec2 vUv;
+in vec4 vColor;
+out vec4 outColor;
+void main() {
+  float side = smoothstep(0.0, 0.18, vUv.x) * smoothstep(1.0, 0.82, vUv.x);
+  float along = pow(1.0 - vUv.y, 1.6);
+  float a = side * along * vColor.a;
+  outColor = vec4(vColor.rgb * a, 0.0);
 }`;
 
 /** One building (or the traveller): its vertices on the GPU. */
@@ -261,11 +329,13 @@ export class Model {
   }
 }
 
-/** A model as drawn this frame: each part's transform (column-major mat4) and presence/light. */
+/** A model as drawn this frame: each part's transform (column-major mat4) and presence/light, and
+ * the colours it is drawn in. */
 export interface Layer {
   model: Model;
   parts: Float32Array;
   partFx: Float32Array;
+  pal?: Palette;
 }
 
 function compile(gl: WebGL2RenderingContext, vs: string, fs: string) {
@@ -293,16 +363,36 @@ function compile(gl: WebGL2RenderingContext, vs: string, fs: string) {
 
 type Program = ReturnType<typeof compile>;
 
+/** A vertex array for vertices streamed every frame. */
+function stream(gl: WebGL2RenderingContext, sizes: number[]) {
+  const vao = gl.createVertexArray()!;
+  gl.bindVertexArray(vao);
+  const buf = gl.createBuffer()!;
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  const stride = sizes.reduce((a, b) => a + b, 0) * 4;
+  let off = 0;
+  sizes.forEach((n, i) => {
+    gl.enableVertexAttribArray(i);
+    gl.vertexAttribPointer(i, n, gl.FLOAT, false, stride, off);
+    off += n * 4;
+  });
+  gl.bindVertexArray(null);
+  return { vao, buf, floats: stride / 4 };
+}
+
+const CORNERS = [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]];
+
 export class Renderer {
   gl: WebGL2RenderingContext;
   private mesh: Program;
   private skyP: Program;
   private dustP: Program;
-  private haloP: Program;
+  private discP: Program;
+  private beamP: Program;
   private dustVao: WebGLVertexArrayObject;
   private dustN: number;
-  private haloVao: WebGLVertexArrayObject;
-  private haloBuf: WebGLBuffer;
+  private disc: ReturnType<typeof stream>;
+  private beam: ReturnType<typeof stream>;
   private emptyVao: WebGLVertexArrayObject;
   dustBox: { min: V3; size: V3 } = { min: [-10, -8, -10], size: [30, 30, 30] };
 
@@ -313,7 +403,8 @@ export class Renderer {
     this.mesh = compile(gl, MESH_VS, MESH_FS);
     this.skyP = compile(gl, SKY_VS, SKY_FS);
     this.dustP = compile(gl, DUST_VS, DUST_FS);
-    this.haloP = compile(gl, HALO_VS, HALO_FS);
+    this.discP = compile(gl, DISC_VS, DISC_FS);
+    this.beamP = compile(gl, BEAM_VS, BEAM_FS);
 
     // Dust seeds.
     this.dustN = 140;
@@ -329,17 +420,8 @@ export class Renderer {
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, 0);
 
-    this.haloVao = gl.createVertexArray()!;
-    gl.bindVertexArray(this.haloVao);
-    this.haloBuf = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.haloBuf);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 28, 0);
-    gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 28, 12);
-    gl.enableVertexAttribArray(2);
-    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 28, 20);
-
+    this.disc = stream(gl, [3, 2, 2, 3]);
+    this.beam = stream(gl, [3, 2, 4]);
     this.emptyVao = gl.createVertexArray()!;
     gl.bindVertexArray(null);
   }
@@ -369,6 +451,29 @@ export class Renderer {
     gl.uniform1f(p.u('uSkyR'), pal.skyR);
   }
 
+  private materials(pal: Palette) {
+    const gl = this.gl;
+    const top = new Float32Array(MAX_MATS * 3), left = new Float32Array(MAX_MATS * 3), right = new Float32Array(MAX_MATS * 3);
+    const mfx = new Float32Array(MAX_MATS * 4);
+    const grad = new Float32Array(MAX_MATS * 2);
+    pal.mats.forEach((m, i) => {
+      top.set(m.top, i * 3);
+      left.set(m.left, i * 3);
+      right.set(m.right, i * 3);
+      mfx[i * 4] = m.tiles ? 1 : 0;
+      mfx[i * 4 + 1] = m.mist ? 1 : 0;
+      mfx[i * 4 + 2] = m.grad ? 1 : 0;
+      if (m.grad) grad.set(m.grad, i * 2);
+    });
+    gl.uniform3fv(this.mesh.u('uTop'), top);
+    gl.uniform3fv(this.mesh.u('uLeft'), left);
+    gl.uniform3fv(this.mesh.u('uRight'), right);
+    gl.uniform4fv(this.mesh.u('uMatFx'), mfx);
+    gl.uniform2fv(this.mesh.u('uMatGrad'), grad);
+    gl.uniform2fv(this.mesh.u('uFog'), pal.fog);
+    gl.uniform3fv(this.mesh.u('uGlow'), pal.glow);
+  }
+
   draw(o: {
     w: number;
     h: number;
@@ -377,6 +482,8 @@ export class Renderer {
     pal: Palette;
     layers: Layer[];
     glows: Glow[];
+    beams?: Beam[];
+    puffs?: Puff[];
     time: number;
     dust: number;
   }) {
@@ -409,28 +516,19 @@ export class Renderer {
       gl.disable(gl.BLEND);
     }
 
-    // The building.
+    // The buildings, each in its own colours.
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.clear(gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.mesh.p);
     this.common(this.mesh, w, h, dpr, view, pal);
-    const top = new Float32Array(MAX_MATS * 3), left = new Float32Array(MAX_MATS * 3), right = new Float32Array(MAX_MATS * 3);
-    const mfx = new Float32Array(MAX_MATS * 2);
-    pal.mats.forEach((m, i) => {
-      top.set(m.top, i * 3);
-      left.set(m.left, i * 3);
-      right.set(m.right, i * 3);
-      mfx[i * 2] = m.tiles ? 1 : 0;
-      mfx[i * 2 + 1] = m.mist ? 1 : 0;
-    });
-    gl.uniform3fv(this.mesh.u('uTop'), top);
-    gl.uniform3fv(this.mesh.u('uLeft'), left);
-    gl.uniform3fv(this.mesh.u('uRight'), right);
-    gl.uniform2fv(this.mesh.u('uMatFx'), mfx);
-    gl.uniform2fv(this.mesh.u('uFog'), pal.fog);
-    gl.uniform3fv(this.mesh.u('uGlow'), pal.glow);
+    let current: Palette | null = null;
     for (const l of o.layers) {
+      const lp = l.pal ?? pal;
+      if (lp !== current) {
+        this.materials(lp);
+        current = lp;
+      }
       gl.uniformMatrix4fv(this.mesh.u('uPart'), false, l.parts);
       gl.uniform4fv(this.mesh.u('uPartFx'), l.partFx);
       const md = l.model;
@@ -443,30 +541,56 @@ export class Renderer {
         gl.disable(gl.CULL_FACE);
       }
     }
+    gl.disable(gl.DEPTH_TEST);
+    gl.enable(gl.BLEND);
 
-    // Halos.
-    const glows = o.glows.filter((g) => g.a > 0.004);
-    if (glows.length) {
-      const v = new Float32Array(glows.length * 6 * 7);
+    // Beams of light, added on.
+    const beams = (o.beams ?? []).filter((b) => b.a > 0.004);
+    if (beams.length) {
+      const v = new Float32Array(beams.length * 6 * this.beam.floats);
       let k = 0;
-      for (const g of glows) {
-        for (const [cx, cy] of [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]]) {
-          v.set([g.at[0], g.at[1], g.at[2], cx, cy, g.r, g.a], k);
-          k += 7;
+      for (const b of beams) {
+        const [p0, p1, p2, p3] = b.quad;
+        const corner = (p: V3, u: number, t: number) => {
+          v.set([p[0], p[1], p[2], u, t, b.color[0], b.color[1], b.color[2], b.a], k);
+          k += this.beam.floats;
+        };
+        corner(p0, 0, 0); corner(p1, 1, 0); corner(p2, 1, 1);
+        corner(p0, 0, 0); corner(p2, 1, 1); corner(p3, 0, 1);
+      }
+      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.useProgram(this.beamP.p);
+      this.common(this.beamP, w, h, dpr, view, pal);
+      gl.bindVertexArray(this.beam.vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.beam.buf);
+      gl.bufferData(gl.ARRAY_BUFFER, v, gl.DYNAMIC_DRAW);
+      gl.drawArrays(gl.TRIANGLES, 0, beams.length * 6);
+    }
+
+    // Halos (added on), then clouds (laid over).
+    const discs = (list: { at: V3; r: number; a: number; color: RGB }[], cloud: boolean) => {
+      if (!list.length) return;
+      const v = new Float32Array(list.length * 6 * this.disc.floats);
+      let k = 0;
+      for (const g of list) {
+        for (const [cx, cy] of CORNERS) {
+          v.set([g.at[0], g.at[1], g.at[2], cx, cy, g.r, g.a, g.color[0], g.color[1], g.color[2]], k);
+          k += this.disc.floats;
         }
       }
-      gl.disable(gl.DEPTH_TEST);
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.ONE, gl.ONE);
-      gl.useProgram(this.haloP.p);
-      this.common(this.haloP, w, h, dpr, view, pal);
-      gl.uniform3fv(this.haloP.u('uGlow'), pal.glow);
-      gl.bindVertexArray(this.haloVao);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.haloBuf);
+      if (cloud) gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      else gl.blendFunc(gl.ONE, gl.ONE);
+      gl.useProgram(this.discP.p);
+      this.common(this.discP, w, h, dpr, view, pal);
+      gl.uniform1f(this.discP.u('uCloud'), cloud ? 1 : 0);
+      gl.bindVertexArray(this.disc.vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.disc.buf);
       gl.bufferData(gl.ARRAY_BUFFER, v, gl.DYNAMIC_DRAW);
-      gl.drawArrays(gl.TRIANGLES, 0, glows.length * 6);
-      gl.disable(gl.BLEND);
-    }
+      gl.drawArrays(gl.TRIANGLES, 0, list.length * 6);
+    };
+    discs(o.glows.filter((g) => g.a > 0.004).map((g) => ({ ...g, color: g.color ?? pal.glow })), false);
+    discs((o.puffs ?? []).filter((p) => p.a > 0.004), true);
+    gl.disable(gl.BLEND);
     gl.bindVertexArray(null);
   }
 }

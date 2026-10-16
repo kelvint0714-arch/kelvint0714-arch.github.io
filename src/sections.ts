@@ -168,7 +168,7 @@ const about: Section = {
   title: 'About',
   en: 'Who I am',
   place: 'the door at the foot of the twin towers',
-  building: 'The House',
+  building: 'The Lotus Palace',
   render: () => `
     <div class="about">
       <aside class="card-id">
@@ -230,7 +230,7 @@ const research: Section = {
   title: 'Research',
   en: 'Papers',
   place: 'the rune on the tall tower',
-  building: 'The Observatory',
+  building: 'The Night Window',
   render: () => `
     <div class="papers" data-view="list">
       <ol class="paper-list">${papers.length ? papers.map(paperRow).join('') : emptyRow}</ol>
@@ -269,7 +269,7 @@ const works: Section = {
   title: 'Projects',
   en: 'Works & repositories',
   place: 'the door at the head of the stair',
-  building: 'The Stair Tower',
+  building: 'The Amber Sky',
   render: () => `
     <div class="archive">
       <ol class="archive-index">${archiveIndex(toProjects(repos))}</ol>
@@ -365,7 +365,7 @@ const activity: Section = {
   title: 'Activity',
   en: 'Commit log',
   place: 'the crank beside the stair',
-  building: 'The Clockwork',
+  building: 'The Endless Stair',
   render: () => {
     const s = activityStats();
     const max = Math.max(1, ...s.days.map((d) => d[1]));
@@ -414,7 +414,7 @@ const contact: Section = {
   title: 'Contact',
   en: 'Say hello',
   place: 'the pavilion below',
-  building: 'The Bell Tower',
+  building: 'The Violet Tree',
   render: () => `
     <div class="channels">
       <a class="channel" href="${esc(profile.github)}" target="_blank" rel="noopener">

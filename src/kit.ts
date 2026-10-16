@@ -19,6 +19,17 @@ export const M = {
   floor: 10,
   leaf: 11,
   lamp: 12,
+  roof: 13,
+  petal: 14,
+  water: 15,
+  gold: 16,
+  night: 17,
+  rock: 18,
+  vine: 19,
+  line: 20,
+  accent: 21,
+  wall: 22,
+  crow: 23,
 } as const;
 
 export function kit(m: Mesh) {
@@ -109,7 +120,101 @@ export function kit(m: Mesh) {
       m.quad(p(r0, a0), p(r0, a1), p(r1, a1), p(r1, a0), mat, part, [0, 1, 0]);
     }
   };
-  return { doorZ, doorX, slitZ, slitX, friezeZ, friezeX, crenels, dome, keel, island, wheel, runeRing };
+  // A ring (torus) round an axis through `c`: lying flat ('y'), or standing on a +x or +z face.
+  const torus = (c: V3, R: number, r: number, axis: 'x' | 'y' | 'z', mat: number, part = 0) => {
+    const from = m.data.length;
+    const prof: [number, number][] = [];
+    for (let i = 0; i <= 10; i++) {
+      const a = -Math.PI / 2 + (i / 10) * Math.PI * 2;
+      prof.push([R + r * Math.cos(a), r * Math.sin(a)]);
+    }
+    m.lathe([0, 0, 0], prof, 18, mat, part);
+    if (axis === 'x') place(m.data, from, 0, -Math.PI / 2, 0, c);
+    else if (axis === 'z') place(m.data, from, Math.PI / 2, 0, 0, c);
+    else place(m.data, from, 0, 0, 0, c);
+  };
+  // A cube of `size` at `c`, tipped about x, then z, then y (blocky foliage, a fallen stone).
+  const tipped = (c: V3, size: V3, ax: number, az: number, ay: number, mat: number, part = 0) => {
+    const from = m.data.length;
+    m.box([-size[0] / 2, -size[1] / 2, -size[2] / 2], [size[0] / 2, size[1] / 2, size[2] / 2], mat, part);
+    place(m.data, from, ax, az, ay, c);
+  };
+  // A rough rock: a few facets, its rings jittered.
+  const rock = (c: V3, r: number, h: number, seed: number, part = 0, mat: number = M.rock) => {
+    let s = seed * 9301 + 49297;
+    const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+    const seg = 6;
+    const rings: [number, number][] = [[r * (0.75 + 0.2 * rnd()), -h * 0.15], [r, h * 0.25], [r * (0.7 + 0.2 * rnd()), h * 0.7], [r * 0.25, h]];
+    const pts = rings.map(([rr, y]) => Array.from({ length: seg }, (_, i) => {
+      const a = (i / seg) * Math.PI * 2 + seed;
+      const k = rr * (0.8 + 0.4 * rnd());
+      return [c[0] + k * Math.cos(a), c[1] + y, c[2] + k * Math.sin(a)] as V3;
+    }));
+    for (let j = 0; j < rings.length - 1; j++)
+      for (let i = 0; i < seg; i++) {
+        const a = pts[j][i], b = pts[j][(i + 1) % seg], cc = pts[j + 1][(i + 1) % seg], d = pts[j + 1][i];
+        m.tri(a, d, cc, faceN(a, d, cc), mat, part);
+        m.tri(a, cc, b, faceN(a, cc, b), mat, part);
+      }
+    const top: V3 = [c[0], c[1] + h * 1.05, c[2]];
+    for (let i = 0; i < seg; i++) {
+      const a = pts[rings.length - 1][i], b = pts[rings.length - 1][(i + 1) % seg];
+      m.tri(a, top, b, faceN(a, top, b), mat, part);
+    }
+  };
+  // A two-tier pagoda roof (square, flared) and its spire.
+  const pagoda = (c: V3, w: number, part = 0) => {
+    m.lathe(c, [[w * 0.95, 0], [w * 1.0, 0.12], [w * 0.55, 0.62], [w * 0.5, 0.62]], 4, M.roof, part, Math.PI / 4);
+    m.box([c[0] - w * 0.36, c[1] + 0.62, c[2] - w * 0.36], [c[0] + w * 0.36, c[1] + 1.0, c[2] + w * 0.36], M.wall, part);
+    m.lathe([c[0], c[1] + 1.0, c[2]], [[w * 0.7, 0], [w * 0.74, 0.1], [w * 0.3, 0.5], [w * 0.08, 0.62], [0.0001, 1.25]], 4, M.roof, part, Math.PI / 4);
+  };
+  // An onion arch's outline (a pointed, bulbous window head) on a +z face, `w` wide, `h` tall.
+  const onionZ = (x: number, y: number, z: number, w: number, h: number, mat: number, part = 0) => {
+    const pts: [number, number][] = [[0, 0], [w, 0], [w, h * 0.55]];
+    for (let i = 1; i < 12; i++) {
+      const t = i / 12;
+      // Up the right side, bulging out then in to the point.
+      const u = w * (1 - t) * (0.5 + 0.5 * Math.cos(t * Math.PI * 0.9)) + w * 0.5 * t;
+      pts.push([Math.max(w * 0.5, Math.min(w * 1.08, w * 0.5 + (u - w * 0.5) * 1.15)), h * 0.55 + h * 0.45 * Math.sin((t * Math.PI) / 2)]);
+    }
+    pts.push([w * 0.5, h]);
+    for (let i = 11; i >= 1; i--) {
+      const [px, py] = pts[2 + i];
+      pts.push([w - px, py]);
+    }
+    pts.push([0, h * 0.55]);
+    m.decal([x, y, z], [1, 0, 0], [0, 1, 0], pts, mat, part);
+  };
+  // A thin line frame (an outline) standing on a +z or +x face.
+  const frame = (o: V3, face: 'x' | 'z', w: number, h: number, t: number, mat: number, part = 0) => {
+    const u: V3 = face === 'z' ? [1, 0, 0] : [0, 0, -1];
+    const v: V3 = [0, 1, 0];
+    for (const r of [rect(0, 0, w, t), rect(0, h - t, w, t), rect(0, 0, t, h), rect(w - t, 0, t, h)]) m.decal(o, u, v, r, mat, part);
+  };
+  // Hanging vines on a +z or +x face: strings of small leaves.
+  const vines = (o: V3, face: 'x' | 'z', width: number, len: number, seed: number, part = 0) => {
+    const u: V3 = face === 'z' ? [1, 0, 0] : [0, 0, -1];
+    let s = seed;
+    const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+    for (let k = 0; k < Math.max(2, Math.round(width / 0.35)); k++) {
+      const x0 = rnd() * width;
+      const l = len * (0.5 + 0.5 * rnd());
+      for (let y = 0; y < l; y += 0.16) {
+        const x = x0 + Math.sin(y * 3 + k) * 0.06;
+        const size = 0.11 * (1 - (y / l) * 0.5);
+        m.decal([o[0], o[1] - y, o[2]], u, [0, 1, 0], [[x, 0], [x + size * 0.6, -size * 0.4], [x, -size], [x - size * 0.6, -size * 0.4]], M.vine, part);
+      }
+    }
+  };
+  return { doorZ, doorX, slitZ, slitX, friezeZ, friezeX, crenels, dome, keel, island, wheel, runeRing, torus, tipped, rock, pagoda, onionZ, frame, vines };
+}
+
+function faceN(a: V3, b: V3, c: V3): V3 {
+  const u: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const v: V3 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const n: V3 = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+  const l = Math.hypot(...n) || 1;
+  return [n[0] / l, n[1] / l, n[2] / l];
 }
 
 /** Moves (and turns) a run of vertices already in a mesh: rotate about x by `ax`, then about z by

@@ -6,8 +6,8 @@
 
 import type { V3 } from './geometry';
 import { buildFigure } from './kit';
-import { blend } from './palettes';
-import { MAX_PARTS, project, Renderer, type Glow, type Layer, type Model, type View } from './renderer';
+import { blend, roomPalette, skyMix } from './palettes';
+import { MAX_PARTS, project, Renderer, type Beam, type Glow, type Layer, type Model, type Palette, type Puff, type View } from './renderer';
 import { buildRooms, type Assembly, type Pose, type Room } from './rooms';
 import { buildWorld, P, PART_COUNT, type World } from './world';
 
@@ -80,6 +80,8 @@ interface Def {
   /** Its outline on screen at unit scale (what the framing fits). */
   extent: { x0: number; x1: number; y0: number; y1: number };
   room: Room | null;
+  /** Its colours by day (0) or dusk (1). */
+  pal: (t: number) => Palette;
 }
 
 interface Stage {
@@ -91,7 +93,7 @@ interface Stage {
   layer: Layer;
 }
 
-type Walk = { path: V3[]; t0: number; speed: number };
+type Walk = { path: V3[]; t0: number; speed: number; loop?: boolean };
 
 export class Valley {
   private r: Renderer;
@@ -122,6 +124,10 @@ export class Valley {
   // Light: 0 day, 1 dusk, gliding when the system's appearance changes.
   private dark = 0;
   private darkTo = 0;
+  // The sky crossing from one building's world to the next.
+  private skyFrom: Palette | null = null;
+  private skyT0 = 0;
+  private skyNow: Palette | null = null;
 
   private hot: string | null = null;
   private hotLevel = new Map<string, number>();
@@ -148,7 +154,7 @@ export class Valley {
     this.reduced = opts.reducedMotion;
     this.dark = this.darkTo = opts.dark ? 1 : 0;
     this.hubDef = this.define('hub', this.world.mesh, this.r.model(this.world.mesh, this.world.culledFrom), PART_COUNT, this.world.pivots, ASSEMBLY, null);
-    for (const room of buildRooms()) this.roomDefs.set(room.id, this.define(room.id, room.mesh, this.r.model(room.mesh), room.parts, room.pivots, room.assembly, room));
+    for (const room of buildRooms()) this.roomDefs.set(room.id, this.define(room.id, room.mesh, this.r.model(room.mesh, room.culledFrom), room.parts, room.pivots, room.assembly, room));
     this.figLayer = { model: this.r.model(buildFigure()), parts: new Float32Array(MAX_PARTS * 16), partFx: new Float32Array(MAX_PARTS * 4) };
     this.stage = this.spawn(this.hubDef, -1000, 1);
     const home = this.station('about')!;
@@ -176,7 +182,8 @@ export class Valley {
       const [px, py] = project(unit, [data[i], data[i + 1], data[i + 2]]);
       x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
     }
-    return { place, model, parts, pivots, assembly, extent: { x0, x1, y0, y1 }, room };
+    const pal = room ? (t: number) => roomPalette(room.id, t) : blend;
+    return { place, model, parts, pivots, assembly, extent: { x0, x1, y0, y1 }, room, pal };
   }
 
   private spawn(def: Def, born: number, pace: number): Stage {
@@ -305,6 +312,7 @@ export class Valley {
       this.sinking = null;
       this.next = null;
       this.stage = this.spawn(def, -1000, 1);
+      this.skyFrom = null;
       this.camFrom = this.camTo = this.frameFor(def);
       const path = this.arrivalWalk(place, from);
       this.fig = [...path[path.length - 1]] as V3;
@@ -404,7 +412,7 @@ export class Valley {
     const t = this.clock;
     if (this.figShowAt >= 0 && t >= this.figShowAt && this.figPath) {
       this.fig = [...this.figPath[0]] as V3;
-      this.walk = { path: this.figPath, t0: t, speed: 0.9 };
+      this.walk = { path: this.figPath, t0: t, speed: this.stage.def.room?.speed ?? 0.9 };
       this.figShowAt = -1;
     }
     const leaving = !!(this.next || this.sinking);
@@ -413,20 +421,27 @@ export class Valley {
       if (leaving || this.figShowAt >= 0) this.figAlpha = Math.max(0, this.figAlpha - 1 / 10);
       return;
     }
-    const { path, t0, speed } = this.walk;
+    const { path, t0, speed, loop } = this.walk;
+    // On a loop a straight drop is a jump (made where it can't be seen): it takes no time.
+    const segLen = (a: V3, b: V3) => (loop && Math.hypot(b[0] - a[0], b[2] - a[2]) < 1e-6 ? 0 : Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]));
     let total = 0;
-    for (let i = 0; i < path.length - 1; i++) total += Math.hypot(path[i + 1][0] - path[i][0], path[i + 1][1] - path[i][1], path[i + 1][2] - path[i][2]);
+    for (let i = 0; i < path.length - 1; i++) total += segLen(path[i], path[i + 1]);
     let d = Math.max(0, t - t0) * speed;
+    if (loop) d %= total;
     // Coming out of a door she fades in; going in, she fades over her last steps.
-    this.figAlpha = leaving ? clamp01((total - d) / 0.35) : clamp01(d / 0.3);
+    this.figAlpha = leaving ? clamp01((total - d) / 0.35) : loop ? 1 : clamp01(d / 0.3);
     for (let i = 0; i < path.length - 1; i++) {
       const a = path[i], b = path[i + 1];
-      const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const len = segLen(a, b);
       if (d <= len || i === path.length - 2) {
         const k = len > 0 ? Math.min(1, d / len) : 1;
         this.fig = lerp3(a, b, k);
-        if (len > 0.01) this.figYaw = Math.atan2(b[0] - a[0], b[2] - a[2]);
-        if (k >= 1 && i === path.length - 2) this.walk = null;
+        if (Math.hypot(b[0] - a[0], b[2] - a[2]) > 0.01) this.figYaw = Math.atan2(b[0] - a[0], b[2] - a[2]);
+        if (k >= 1 && i === path.length - 2 && !loop) {
+          // Some rooms she goes on walking in.
+          const room = this.stage.def.room;
+          this.walk = room?.loop && !leaving && !this.next ? { path: room.loop, t0: t, speed, loop: true } : null;
+        }
         return;
       }
       d -= len;
@@ -535,7 +550,8 @@ export class Valley {
     const age = (this.clock - st.born) * st.pace;
     if (st.def.room) {
       const on = clamp01((age - 0.9) / 0.8) * weight;
-      return st.def.room.glows.map((g, i) => ({ at: g.at, r: g.r, a: (0.28 + 0.3 * dusk) * pulse(i) * on }));
+      const pal = st.layer.pal ?? st.def.pal(dusk);
+      return st.def.room.glows.map((g, i) => ({ at: g.at, r: g.r, a: (0.3 + 0.3 * dusk) * pulse(i) * on, color: pal.mats[g.mat].top }));
     }
     const shown = this.intro ? clamp01((age - 2.6) / 1.2) : clamp01((age - 2.0) / 1.0);
     return this.world.stations.map((s) => {
@@ -567,6 +583,9 @@ export class Valley {
     if (this.sinking && this.clock - this.sinking.dies > SINK + this.sinking.def.assembly.length * SINK_STAGGER + 0.05) this.sinking = null;
     if (this.next && this.clock >= this.next.born) {
       const def = this.defOf(this.next.place);
+      // The sky turns to the new world's as it rises.
+      this.skyFrom = this.skyNow;
+      this.skyT0 = this.clock;
       this.stage = this.spawn(def, this.next.born, def.room ? 1 : RETURN_PACE);
       this.next = null;
       this.sinking = null;
@@ -604,13 +623,29 @@ export class Valley {
 
     const layers: Layer[] = [];
     let glows: Glow[] = [];
+    const beams: Beam[] = [];
+    const puffs: Puff[] = [];
     for (const st of [this.sinking, this.next ? null : this.stage]) {
       if (!st) continue;
+      st.layer.pal = st.def.pal(this.dark);
       this.matrices(st);
       layers.push(st.layer);
       const fading = st.dies < Infinity ? 1 - clamp01((this.clock - st.dies) / SINK) : 1;
       glows = glows.concat(this.glows(st, fading));
+      const room = st.def.room;
+      if (room) {
+        const since = this.clock - st.born;
+        const shown = clamp01(since / 1.0) * fading;
+        const t = this.reduced ? 20 : this.clock;
+        for (const b of room.beams?.(st.layer.pal, this.reduced ? 10 : since, t) ?? []) beams.push({ ...b, a: b.a * fading });
+        for (const p of room.puffs?.(st.layer.pal, t) ?? []) puffs.push({ ...p, a: p.a * shown });
+      }
     }
+    // The sky: the standing building's world, crossing over from the last one's.
+    const skyTo = this.stage.def.pal(this.dark);
+    const sk = this.skyFrom && !this.reduced ? ease(clamp01((this.clock - this.skyT0) / 1.3)) : 1;
+    if (sk < 1) busy = true;
+    this.skyNow = sk >= 1 ? skyTo : skyMix(this.skyFrom!, skyTo, sk);
     if (this.figAlpha > 0.003) {
       this.figureMatrix();
       layers.push(this.figLayer);
@@ -620,9 +655,11 @@ export class Valley {
       h: this.h,
       dpr: this.dpr,
       view: this.view(),
-      pal: blend(this.dark),
+      pal: this.skyNow,
       layers,
       glows,
+      beams,
+      puffs,
       time: this.reduced ? 20 : this.clock,
       dust: this.intro ? clamp01((this.clock - this.stage.born) / 2) : 1,
     });
