@@ -5,9 +5,10 @@
 // following the system's appearance, and the quiet intro in which the great building first assembles.
 
 import type { V3 } from './geometry';
+import { along, groundTrack, heightAt, pathLength, wallBehind } from './ground';
 import { buildFigure } from './kit';
 import { blend, roomPalette, skyMix } from './palettes';
-import { MAX_PARTS, project, Renderer, type Beam, type Glow, type Layer, type Model, type Palette, type Puff, type View } from './renderer';
+import { MAX_PARTS, project, Renderer, type Beam, type Glow, type Layer, type Model, type Palette, type Puff, type RGB, type View } from './renderer';
 import { buildRooms, type Assembly, type Pose, type Room } from './rooms';
 import { buildWorld, P, PART_COUNT, PENROSE, type World } from './world';
 import type { Solid } from './geometry';
@@ -44,7 +45,6 @@ const easeBack = (t: number) => {
 };
 const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const lerp3 = (a: V3, b: V3, t: number): V3 => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 
 /** A piece's arrival; with `ry` it also turns (first turning, high up, then dropping into place);
  * with `grow` it unfolds out of the face it hangs from (scaled along that axis from its pivot), so
@@ -125,6 +125,10 @@ const RETURN_PACE = 2.4;
 /** How long each piece of a building takes to sink into the mist, and the stagger between pieces. */
 const SINK = 0.5;
 const SINK_STAGGER = 0;
+/** Going through a door she hurries: in at most this long. */
+const EXIT_MAX = 0.85;
+/** The mist between two worlds: how long it takes to part once the next one begins to rise. */
+const VEIL_PART = 1.5;
 
 interface Def {
   place: string;
@@ -135,6 +139,8 @@ interface Def {
   /** Its outline on screen at unit scale (what the framing fits). */
   extent: { x0: number; x1: number; y0: number; y1: number };
   room: Room | null;
+  /** Its triangles at rest (for the traveller's feet). */
+  data: Float32Array;
   /** Its colours by day (0) or dusk (1). */
   pal: (t: number) => Palette;
   /** The great building's opening (its pieces' paths made clear, like `assembly`'s). */
@@ -150,7 +156,18 @@ interface Stage {
   layer: Layer;
 }
 
-type Walk = { path: V3[]; t0: number; speed: number; loop?: boolean };
+/** A walk made ready: through a door it begins (or ends) inside the wall; `ys` are her feet's heights
+ * along it (on each step of a stair, along a ramp's curve). */
+interface Track {
+  path: V3[];
+  ys: Float32Array;
+  total: number;
+  loop?: boolean;
+  /** Going in through a door (she fades over her last steps) rather than coming out. */
+  going?: boolean;
+}
+
+type Walk = Track & { t0: number; speed: number };
 
 export class Valley {
   private r: Renderer;
@@ -202,6 +219,11 @@ export class Valley {
   private walk: Walk | null = null;
   private figShowAt = -1;
   private figPath: V3[] | null = null;
+  /** The building she stands in: when it sinks she sinks with it. */
+  private figStage: Stage | null = null;
+  private tracks = new Map<string, Track>();
+  // The mist that rises as one world sinks, and parts as the next rises (over both their boxes).
+  private veil: { t0: number; born: number; boxes: Box[] } | null = null;
 
   /** Set by the page: where the great building sits, and where a section's building sits. */
   hubBox: (w: number, h: number) => Box = (w, h) => ({ x: 0, y: 0, w, h });
@@ -218,9 +240,18 @@ export class Valley {
     for (const room of buildRooms()) this.roomDefs.set(room.id, this.define(room.id, room.mesh, this.r.model(room.mesh, room.culledFrom), room.parts, room.pivots, clearPaths(room.assembly, room.solids), room));
     this.figLayer = { model: this.r.model(buildFigure()), parts: new Float32Array(MAX_PARTS * 16), partFx: new Float32Array(MAX_PARTS * 4) };
     this.stage = this.spawn(this.hubDef, -1000, 1);
-    const home = this.station('about')!;
-    this.fig = [...home.walk[home.walk.length - 1]] as V3;
+    this.restAt(this.hubDef, this.station('about')!.walk);
     for (const s of this.world.stations) this.hotLevel.set(s.id, 0);
+    // (her walks made ready while nothing else is happening)
+    const ready = () => {
+      for (const s of this.world.stations) this.track(this.hubDef, s.walk, 'out');
+      for (const d of this.roomDefs.values()) {
+        this.track(d, d.room!.walk, 'out');
+        if (d.room!.loop) this.track(d, d.room!.loop, 'loop');
+      }
+    };
+    if ('requestIdleCallback' in window) requestIdleCallback(ready, { timeout: 4000 });
+    else setTimeout(ready, 1500);
     const resize = () => {
       this.w = window.innerWidth;
       this.h = window.innerHeight;
@@ -255,7 +286,7 @@ export class Valley {
       y0 = Math.min(y0, sp[1] - spinR); y1 = Math.max(y1, sp[1] + spinR);
     }
     const pal = room ? (t: number) => roomPalette(room.id, t) : blend;
-    return { place, model, parts, pivots, assembly, extent: { x0, x1, y0, y1 }, room, pal };
+    return { place, model, parts, pivots, assembly, extent: { x0, x1, y0, y1 }, room, data, pal };
   }
 
   private spawn(def: Def, born: number, pace: number): Stage {
@@ -386,14 +417,11 @@ export class Valley {
     if (instant || this.reduced) {
       this.sinking = null;
       this.next = null;
+      this.veil = null;
       this.stage = this.spawn(def, -1000, 1);
       this.skyFrom = null;
       this.camFrom = this.camTo = this.frameFor(def);
-      const path = this.arrivalWalk(place, from);
-      this.fig = [...path[path.length - 1]] as V3;
-      this.walk = null;
-      this.figShowAt = -1;
-      this.figAlpha = 1;
+      this.restAt(def, this.arrivalWalk(place, from));
       this.kick();
       return Promise.resolve();
     }
@@ -402,17 +430,20 @@ export class Valley {
     if (this.next) {
       this.next.place = place;
       this.figPath = this.arrivalWalk(place, from);
+      if (this.veil) this.veil.boxes = [this.veil.boxes[0], this.boxOf(def)];
       return this.wait(this.next.born + 0.9 - now);
     }
     // The traveller goes in: through the room's door if she is in a room; on the overview through
-    // the station's door if she stands by it (else she just fades).
+    // the station's door if she stands by it. Otherwise she goes down with the building.
     const leaving = this.stage;
     const exit = this.exitWalk(leaving.def, place);
-    let sinkAt = now + 0.3;
+    let sinkAt = now + 0.25;
     this.walk = null;
     if (exit) {
-      this.walk = { path: exit, t0: now, speed: 1.3 };
-      sinkAt = now + 0.45;
+      const speed = Math.max(1.3, exit.total / EXIT_MAX);
+      this.walk = { ...exit, t0: now, speed };
+      // (the building waits until she is nearly through)
+      sinkAt = now + Math.min(0.6, (exit.total / speed) * 0.7);
     }
     this.figShowAt = -1;
     // The camera leans in towards the door being gone through.
@@ -420,15 +451,51 @@ export class Valley {
     if (door) {
       const v = this.view();
       const [dx, dy] = project(v, door);
-      this.glideTo({ origin: door, scale: v.scale * 1.35, cx: dx, cy: dy }, sinkAt - now + SINK + 0.3);
+      this.glideTo({ origin: door, scale: v.scale * 1.25, cx: dx, cy: dy }, sinkAt - now + SINK + 0.4);
     }
     leaving.dies = sinkAt;
     this.sinking = leaving;
-    const born = sinkAt + SINK + 0.3;
+    const born = sinkAt + SINK + 0.1;
     this.next = { place, born };
+    this.veil = { t0: sinkAt, born, boxes: [this.boxOf(leaving.def), this.boxOf(def)] };
     this.figPath = this.arrivalWalk(place, from);
     this.kick();
     return this.wait(born + 0.9 - now);
+  }
+
+  /** She stands, still, at the end of a walk (on what is there). */
+  private restAt(def: Def, path: V3[]) {
+    const tr = this.track(def, path, 'out');
+    const end = path[path.length - 1];
+    this.fig = [end[0], tr.ys[tr.ys.length - 1], end[2]];
+    this.walk = null;
+    this.figShowAt = -1;
+    this.figAlpha = 1;
+    this.figStage = this.stage;
+  }
+
+  /** A walk made ready (and kept): coming `out` of its first point, going `in` at its last, or a loop. */
+  private track(def: Def, path: V3[], mode: 'out' | 'in' | 'loop'): Track {
+    const key = def.place + mode + path.map((p) => p.join(',')).join(';');
+    let tr = this.tracks.get(key);
+    if (tr) return tr;
+    let full = path;
+    if (mode !== 'loop' && path.length > 1) {
+      // Through a door: from (or to) a little inside the wall, so the wall hides her as she passes.
+      const [door, next] = mode === 'out' ? [path[0], path[1]] : [path[path.length - 1], path[path.length - 2]];
+      const dx = door[0] - next[0], dz = door[2] - next[2], l = Math.hypot(dx, dz);
+      if (l > 1e-6) {
+        const back: V3 = [dx / l, 0, dz / l];
+        if (wallBehind(def.data, door, back)) {
+          const inside: V3 = [door[0] + back[0] * 0.45, door[1], door[2] + back[2] * 0.45];
+          full = mode === 'out' ? [inside, ...path] : [...path, inside];
+        }
+      }
+    }
+    const loop = mode === 'loop';
+    tr = { path: full, ys: groundTrack(def.data, full, loop), total: pathLength(full, loop), loop, going: mode === 'in' };
+    this.tracks.set(key, tr);
+    return tr;
   }
 
   private wait(s: number) {
@@ -444,12 +511,12 @@ export class Valley {
   }
 
   /** Her way in through the door she is leaving by, if she is standing by it. */
-  private exitWalk(def: Def, to: string): V3[] | null {
+  private exitWalk(def: Def, to: string): Track | null {
     const path = def.room ? def.room.walk : this.station(to)?.walk;
-    if (!path || this.figAlpha < 0.5) return null;
+    if (!path || this.figAlpha < 0.5 || this.walk || this.figStage !== this.stage) return null;
     const end = path[path.length - 1];
-    if (Math.hypot(end[0] - this.fig[0], end[1] - this.fig[1], end[2] - this.fig[2]) > 0.3) return null;
-    return [...path].reverse();
+    if (Math.hypot(end[0] - this.fig[0], end[2] - this.fig[2]) > 0.3 || Math.abs(end[1] - this.fig[1]) > 0.6) return null;
+    return this.track(def, [...path].reverse(), 'in');
   }
 
   /** The intro: the great building assembles out of the mist; resolves when it is done. */
@@ -458,6 +525,7 @@ export class Valley {
     this.stage = this.spawn(this.hubDef, this.clock, 1);
     this.figAlpha = 0;
     this.walk = null;
+    this.figStage = this.stage;
     this.figPath = this.station('about')!.walk;
     this.figShowAt = this.clock + OPENING.walk;
     this.kick();
@@ -472,13 +540,7 @@ export class Valley {
   arriveNow() {
     const settled = Math.max(10, INTRO_END + 0.1);
     if (this.clock - this.stage.born < settled) this.stage.born = this.clock - settled;
-    if (this.intro) {
-      const home = this.station('about')!;
-      this.fig = [...home.walk[home.walk.length - 1]] as V3;
-      this.figAlpha = 1;
-      this.walk = null;
-      this.figShowAt = -1;
-    }
+    if (this.intro) this.restAt(this.hubDef, this.station('about')!.walk);
     this.kick();
   }
 
@@ -487,40 +549,33 @@ export class Valley {
   private stepTraveller() {
     const t = this.clock;
     if (this.figShowAt >= 0 && t >= this.figShowAt && this.figPath) {
-      this.fig = [...this.figPath[0]] as V3;
-      this.walk = { path: this.figPath, t0: t, speed: this.stage.def.room?.speed ?? 0.9 };
+      // Out of the new building's door, now that it stands complete.
+      const tr = this.track(this.stage.def, this.figPath, 'out');
+      this.walk = { ...tr, t0: t, speed: this.stage.def.room?.speed ?? 0.9 };
+      this.figStage = this.stage;
       this.figShowAt = -1;
     }
-    const leaving = !!(this.next || this.sinking);
     if (!this.walk) {
-      // Gone in at a door, waiting to come out of the next.
-      if (leaving || this.figShowAt >= 0) this.figAlpha = Math.max(0, this.figAlpha - 1 / 10);
+      // (waiting to come out of the next door)
+      if (this.figShowAt >= 0) this.figAlpha = 0;
       return;
     }
-    const { path, t0, speed, loop } = this.walk;
-    // On a loop a straight drop is a jump (made where it can't be seen): it takes no time.
-    const segLen = (a: V3, b: V3) => (loop && Math.hypot(b[0] - a[0], b[2] - a[2]) < 1e-6 ? 0 : Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]));
-    let total = 0;
-    for (let i = 0; i < path.length - 1; i++) total += segLen(path[i], path[i + 1]);
+    const { path, ys, total, t0, speed, loop, going } = this.walk;
     let d = Math.max(0, t - t0) * speed;
     if (loop) d %= total;
-    // Coming out of a door she fades in; going in, she fades over her last steps.
-    this.figAlpha = leaving ? clamp01((total - d) / 0.35) : loop ? 1 : clamp01(d / 0.3);
-    for (let i = 0; i < path.length - 1; i++) {
-      const a = path[i], b = path[i + 1];
-      const len = segLen(a, b);
-      if (d <= len || i === path.length - 2) {
-        const k = len > 0 ? Math.min(1, d / len) : 1;
-        this.fig = lerp3(a, b, k);
-        if (Math.hypot(b[0] - a[0], b[2] - a[2]) > 0.01) this.figYaw = Math.atan2(b[0] - a[0], b[2] - a[2]);
-        if (k >= 1 && i === path.length - 2 && !loop) {
-          // Some rooms she goes on walking in.
-          const room = this.stage.def.room;
-          this.walk = room?.loop && !leaving && !this.next ? { path: room.loop, t0: t, speed, loop: true } : null;
-        }
-        return;
-      }
-      d -= len;
+    // Coming out of a door she fades in (the wall hides her first steps anyway); going in, she fades
+    // over her last.
+    this.figAlpha = going ? clamp01((total - d) / 0.3) : loop ? 1 : clamp01(d / 0.3);
+    const { p, seg } = along(path, Math.min(d, total), loop);
+    p[1] = heightAt(ys, Math.min(d, total));
+    this.fig = p;
+    const a = path[seg], b = path[seg + 1];
+    if (Math.hypot(b[0] - a[0], b[2] - a[2]) > 0.01) this.figYaw = Math.atan2(b[0] - a[0], b[2] - a[2]);
+    if (!loop && d >= total) {
+      // Some rooms she goes on walking in.
+      const room = this.stage.def.room;
+      this.walk = !going && room?.loop && !this.next && this.figStage === this.stage ? { ...this.track(this.stage.def, room.loop, 'loop'), t0: t, speed } : null;
+      if (going) this.figAlpha = 0;
     }
   }
 
@@ -699,20 +754,80 @@ export class Valley {
     });
   }
 
-  private figureMatrix() {
+  /** Her place this frame; returns how much of her shows. */
+  private figureMatrix(): number {
     const walking = this.walk && this.clock > this.walk.t0;
     const bobY = walking && !this.reduced ? Math.abs(Math.sin(this.clock * 9)) * 0.035 : 0;
     // On the overview she rides the pavilion when she stands on it.
     let lift: V3 = [0, 0, 0];
-    if (!this.stage.def.room && !this.next) {
+    const st = this.figStage;
+    if (st && !st.def.room) {
       const pav = this.station('contact')!;
       const d = Math.hypot(this.fig[0] - pav.anchor[0], this.fig[2] - pav.anchor[2]);
-      if (d < 1.6 && Math.abs(this.fig[1] - (pav.anchor[1] - 1.12)) < 0.3) lift = this.hubPose(P.pavilion).off ?? lift;
+      if (d < 1.6 && Math.abs(this.fig[1] - (pav.anchor[1] - 1.12)) < 0.3) lift = [...(this.hubPose(P.pavilion).off ?? lift)] as V3;
+    }
+    // She goes down with the building she stands in.
+    let alpha = this.figAlpha;
+    if (st && st.dies < Infinity) {
+      const k = easeIn(clamp01((this.clock - st.dies) / SINK));
+      lift[1] -= 1.4 * k;
+      alpha *= 1 - k;
     }
     const c = Math.cos(this.figYaw), s = Math.sin(this.figYaw);
     const f = this.fig;
     this.figLayer.parts.set([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, f[0] + lift[0], f[1] + bobY + lift[1], f[2] + lift[2], 1], 0);
-    this.figLayer.partFx[0] = this.figAlpha;
+    this.figLayer.partFx[0] = alpha;
+    return alpha;
+  }
+
+  /**
+   * The mist between two worlds: as one sinks a bank of cloud rises over where it stood (and where
+   * the next will stand); as the next rises the bank parts, drifting out and thinning. Laid out on the
+   * screen, so the camera moving under it doesn't move it.
+   */
+  private veilPuffs(view: View, pal: Palette): Puff[] {
+    const v = this.veil;
+    if (!v) return [];
+    const t = this.clock;
+    const rise = easeOut(clamp01((t - v.t0 + 0.1) / (v.born - v.t0 + 0.05)));
+    const part = clamp01((t - v.born - 0.05) / VEIL_PART);
+    if (part >= 1) {
+      this.veil = null;
+      return [];
+    }
+    const x0 = Math.min(...v.boxes.map((b) => b.x)), x1 = Math.max(...v.boxes.map((b) => b.x + b.w));
+    const y0 = Math.min(...v.boxes.map((b) => b.y)), y1 = Math.max(...v.boxes.map((b) => b.y + b.h));
+    const W = x1 - x0, H = y1 - y0;
+    const rpx = Math.max(80, Math.min(W, H) * 0.2);
+    const cols = Math.max(2, Math.round(W / (rpx * 1.35))), rows = Math.max(3, Math.round(H / (rpx * 0.75)));
+    const white: RGB = [1, 1, 1];
+    const color = pal.skyIn.map((c, i) => lerp(c, white[i], 0.5 - 0.3 * this.dark)) as RGB;
+    const R: V3 = [Math.SQRT1_2, 0, -Math.SQRT1_2];
+    const U: V3 = [-1 / Math.sqrt(6), 2 / Math.sqrt(6), -1 / Math.sqrt(6)];
+    const out: Puff[] = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const i = r * cols + c;
+        const h1 = hash(i), h2 = hash(i + 101), h3 = hash(i + 202);
+        let sx = x0 + ((c + 0.5 + (r % 2 ? 0.35 : -0.15) + (h1 - 0.5) * 0.5) / cols) * W;
+        let sy = y0 + ((r + 0.5 + (h2 - 0.5) * 0.5) / rows) * H;
+        // (rising from below as the old world sinks into it)
+        sy += (1 - rise) * (0.3 + 0.35 * h3) * H;
+        // (parting: out from the middle and up, the middle first)
+        const mx = (sx - (x0 + W / 2)) / (W / 2);
+        const e = ease(clamp01(part * 1.3 - (1 - Math.abs(mx)) * 0.1 - h3 * 0.2));
+        sx += (mx >= 0 ? 1 : -1) * e * (0.25 + 0.35 * Math.abs(mx)) * W;
+        sy -= e * (0.08 + 0.1 * h1) * H;
+        const a = (sx - view.cx) / view.scale, b = (view.cy - sy) / view.scale;
+        out.push({
+          at: [view.origin[0] + a * R[0] + b * U[0], view.origin[1] + b * U[1], view.origin[2] + a * R[2] + b * U[2]],
+          r: (rpx * (0.85 + 0.35 * h2)) / view.scale,
+          color,
+          a: 0.82 * rise * (1 - e),
+        });
+      }
+    }
+    return out;
   }
 
   private glows(st: Stage, weight: number): Glow[] {
@@ -775,10 +890,13 @@ export class Valley {
       this.camTo = to;
       this.camT0 = this.clock;
       this.camDur = 1.5;
-      // She comes out of its door once it has mostly assembled.
+      // She is gone with the old world; she comes out of the new one's door once every piece of it
+      // has settled (nothing moves round her as she walks).
       const end = Math.max(...def.assembly.map((a) => a.at + a.dur)) / this.stage.pace;
-      this.figShowAt = this.clock + end * 0.8;
+      this.figShowAt = this.clock + end + 0.1;
       this.walk = null;
+      this.figAlpha = 0;
+      this.figStage = this.stage;
     }
     if (this.next || this.sinking || this.clock - this.stage.born < 6) busy = true;
 
@@ -840,10 +958,7 @@ export class Valley {
     const sk = this.skyFrom && !this.reduced ? ease(clamp01((this.clock - this.skyT0) / 1.3)) : 1;
     if (sk < 1) busy = true;
     this.skyNow = sk >= 1 ? skyTo : skyMix(this.skyFrom!, skyTo, sk);
-    if (this.figAlpha > 0.003) {
-      this.figureMatrix();
-      layers.push(this.figLayer);
-    }
+    if (this.figAlpha > 0.003 && this.figureMatrix() > 0.003) layers.push(this.figLayer);
     let view = this.view();
     if (this.intro) {
       for (const p of this.openingClouds(this.skyNow ?? blend(this.dark))) puffs.push(p);
@@ -860,6 +975,10 @@ export class Valley {
       };
       const z = this.worldZoom();
       if (z !== 1) view = zoomAbout(view, z, project(view, FOCUS));
+    }
+    if (this.veil) {
+      busy = true;
+      for (const p of this.veilPuffs(view, this.skyNow ?? blend(this.dark))) puffs.push(p);
     }
     this.r.draw({
       w: this.w,
@@ -990,4 +1109,10 @@ export function createValley(canvas: HTMLCanvasElement, opts: ValleyOptions): Va
     console.warn('valley: no WebGL2', e);
     return null;
   }
+}
+
+/** A steady pseudo-random number in 0…1 for an index. */
+function hash(i: number) {
+  const s = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+  return s - Math.floor(s);
 }

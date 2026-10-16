@@ -328,7 +328,7 @@ export function buildWorld(): World {
     {
       id: 'contact',
       anchor: [PC[0], PC[1] + 1.2, PC[2]],
-      walk: [[PC[0] + 1.05, PC[1] + 0.08, PC[2] - 0.75], [PC[0] + 0.6, PC[1] + 0.08, PC[2] - 0.15]],
+      walk: [[PC[0] + 0.62, PC[1] + 0.08, PC[2] - 0.55], [PC[0] + 0.35, PC[1] + 0.08, PC[2] + 0.05]],
       glow: [PC[0], PC[1] + 1.25, PC[2]],
       parts: [P.pavilion],
     },

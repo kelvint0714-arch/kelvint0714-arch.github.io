@@ -756,6 +756,10 @@ function violetTree(): Room {
   const k = kit(m);
   const pivots: V3[] = [];
   const Z0 = -1.4, Z1 = 0.2, DECK = 8.0, BOT = -10;
+  const rampY = (x: number) => {
+    const u = Math.max(0, Math.min(1, (x + 7.6) / 4.4));
+    return DECK - 4.4 + 4.4 * u * u * (3 - 2 * u);
+  };
   const SX0 = 4.6, SX1 = 6.2, SZ1 = 6.0;   // the side aqueduct
   // Walls on arches: n arches between u0 and u1, the wall's top at `top`.
   const arches = (u0: number, u1: number, n: number, top: number, spring: number): [number, number][] => {
@@ -788,12 +792,16 @@ function violetTree(): Room {
   {
     m.box([-3.2, DECK - 0.6, Z0], [SX1, DECK, Z1], M.floor, 1);
     m.box([SX0, DECK - 0.6, Z1], [SX1, DECK, SZ1], M.floor, 1);
-    k.crenels(-3.2, Z0, SX1, Z1, DECK, 1, 0.24);
+    // crenels along its edges — but not across the ramp's head, where she comes up
+    k.parapet('x', -3.2, SX1, DECK, Z0, 1, 0.24);
+    k.parapet('x', -3.2, SX0, DECK, Z1 - 0.24, 1, 0.24);
+    k.parapet('z', Z0 + 0.48, Z1 - 0.24, DECK, SX1 - 0.24, 1, 0.24);
     k.parapet('z', Z1 + 0.24, SZ1, DECK, SX1 - 0.24, 1, 0.24);
+    // (a wave: easing up off the ledge, steepest halfway, easing onto the walk)
     const ramp: [number, number][] = [[-3.2, DECK - 4.4], [-3.2, DECK]];
-    for (let i = 1; i <= 20; i++) {
-      const a = Math.PI / 2 + (i / 20) * (Math.PI / 2);
-      ramp.push([-3.2 + 4.4 * Math.cos(a), DECK - 4.4 + 4.4 * Math.sin(a)]);
+    for (let i = 1; i <= 24; i++) {
+      const x = -3.2 - (i / 24) * 4.4;
+      ramp.push([x, rampY(x)]);
     }
     ramp.push([-7.6, DECK - 5.0], [-3.2, DECK - 5.0]);
     m.extrude(ramp, 'xy', Z0, Z1, M.floor, 1, true);
@@ -804,7 +812,10 @@ function violetTree(): Room {
   const LY = DECK - 4.4;
   {
     m.box([-10.2, LY - 0.6, Z0], [-7.6, LY, Z1], M.floor, 2);
-    k.crenels(-10.2, Z0, -7.6, Z1, LY, 2, 0.22);
+    // (open at the ramp's foot)
+    k.parapet('x', -10.2, -7.6, LY, Z0, 2, 0.22);
+    k.parapet('x', -10.2, -7.6, LY, Z1 - 0.22, 2, 0.22);
+    k.parapet('z', Z0 + 0.44, Z1 - 0.22, LY, -10.2, 2, 0.22);
     m.box([-9.2, -6, Z0 + 0.2], [-8.4, LY - 0.6, Z1 - 0.2], M.stone, 2);
     m.box([-9.7, LY, -1.05], [-9.52, LY + 4.0, 0.05], M.lamp, 2);
     m.box([-9.8, LY, -1.15], [-9.42, LY + 0.14, 0.15], M.white, 2);
@@ -874,7 +885,6 @@ function violetTree(): Room {
     { part: 14, at: 1.2, from: [0, 0, 0], fade: true, dur: 0.6 },
   ];
   leaves.forEach((_, i) => assembly.push({ part: 7 + i, at: 0.95 + i * 0.07, from: [0, 1.0, 0], fade: false, dur: 0.5 }));
-  const rampY = (x: number) => DECK - 4.4 + Math.sqrt(Math.max(0, 4.4 * 4.4 - (x + 3.2) * (x + 3.2)));
   return {
     id: 'contact',
     mesh: new Float32Array(m.data),
@@ -882,7 +892,7 @@ function violetTree(): Room {
     pivots,
     parts: 15,
     assembly,
-    walk: [[-9.4, LY, -0.6], [-7.6, LY, -0.6], [-6.8, rampY(-6.8), -0.6], [-5.8, rampY(-5.8), -0.6], [-4.6, rampY(-4.6), -0.6], [-3.2, DECK, -0.6], [-1.6, DECK, -0.6]],
+    walk: [[-9.4, LY, -0.6], [-7.6, LY, -0.6], ...[-7.0, -6.4, -5.8, -5.2, -4.6, -4.0].map((x) => [x, rampY(x), -0.6] as V3), [-3.2, DECK, -0.6], [-1.6, DECK, -0.6]],
     speed: 0.9,
     glows: [
       { at: [-9.55, LY + 2.2, -0.5], r: 2.0, mat: M.lamp },

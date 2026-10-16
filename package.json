@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "sync": "node scripts/fetch-github.mjs",
+    "check:walks": "node scripts/check-walks.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"
   },
