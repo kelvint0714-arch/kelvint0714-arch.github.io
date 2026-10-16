@@ -1,20 +1,16 @@
 import { papers, profile, projectNotes, type Paper } from './config';
 import githubJson from './data/github.json';
 import { emblem, esc } from './ornaments';
-import { fromImage } from './blackhole';
 
 export interface Section {
   id: string;
   no: string;
-  /** Its name (set large) and a short tag beside it. */
+  /** Its name (set large) and a short line beside it. */
   title: string;
   en: string;
-  /** Its body on the black hole picture, as an image-plane point in Rs (see fromImage). */
-  body: [number, number];
-  /** The body's planet: its radius in Rs. */
-  planet: number;
-  /** How far it floats from the camera, in Rs (the hole is D = 50 away): nearer looks bigger. */
-  depth: number;
+  /** Where its door is on the great building, and the building behind it. */
+  place: string;
+  building: string;
   render: () => string;
   /** Wire up the rendered body; `sub` is what follows the id in the address (#id/sub). */
   mount?: (root: HTMLElement, sub: string) => Mounted | void;
@@ -170,10 +166,9 @@ const about: Section = {
   id: 'about',
   no: '01',
   title: 'About',
-  en: 'WHO I AM',
-  body: fromImage(270, 600),
-  planet: 0.16,
-  depth: 30,
+  en: 'Who I am',
+  place: 'the door at the foot of the twin towers',
+  building: 'The House',
   render: () => `
     <div class="about">
       <aside class="card-id">
@@ -233,10 +228,9 @@ const research: Section = {
   id: 'research',
   no: '02',
   title: 'Research',
-  en: 'PAPERS',
-  body: fromImage(250, 735),
-  planet: 0.16,
-  depth: 36,
+  en: 'Papers',
+  place: 'the rune on the tall tower',
+  building: 'The Observatory',
   render: () => `
     <div class="papers" data-view="list">
       <ol class="paper-list">${papers.length ? papers.map(paperRow).join('') : emptyRow}</ol>
@@ -273,10 +267,9 @@ const works: Section = {
   id: 'projects',
   no: '03',
   title: 'Projects',
-  en: 'WORKS & REPOS',
-  body: fromImage(220, 785),
-  planet: 0.16,
-  depth: 24,
+  en: 'Works & repositories',
+  place: 'the door at the head of the stair',
+  building: 'The Stair Tower',
   render: () => `
     <div class="archive">
       <ol class="archive-index">${archiveIndex(toProjects(repos))}</ol>
@@ -370,10 +363,9 @@ const activity: Section = {
   id: 'activity',
   no: '04',
   title: 'Activity',
-  en: 'COMMIT LOG',
-  body: fromImage(462, 512),
-  planet: 0.16,
-  depth: 41,
+  en: 'Commit log',
+  place: 'the crank beside the stair',
+  building: 'The Clockwork',
   render: () => {
     const s = activityStats();
     const max = Math.max(1, ...s.days.map((d) => d[1]));
@@ -420,10 +412,9 @@ const contact: Section = {
   id: 'contact',
   no: '05',
   title: 'Contact',
-  en: 'OPEN CHANNEL',
-  body: fromImage(430, 655),
-  planet: 0.16,
-  depth: 18,
+  en: 'Say hello',
+  place: 'the pavilion below',
+  building: 'The Bell Tower',
   render: () => `
     <div class="channels">
       <a class="channel" href="${esc(profile.github)}" target="_blank" rel="noopener">
@@ -440,8 +431,7 @@ const contact: Section = {
       </a>`
           : ''
       }
-    </div>
-    <p class="signal" aria-hidden="true">${Array.from({ length: 64 }, (_, i) => `<i style="--i:${i}"></i>`).join('')}</p>`,
+    </div>`,
 };
 
 export const SECTIONS: Section[] = [about, research, works, activity, contact];

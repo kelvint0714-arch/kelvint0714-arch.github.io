@@ -1,13 +1,11 @@
-// The site mark: a shadow ringed by its photon ring, crossed by a tilted disk.
+// The site mark: one block of the valley, lit from the left, with an arched door.
 
 export const emblem = (cls = '') => `
 <svg class="emblem ${cls}" viewBox="0 0 64 64" aria-hidden="true">
-  <g transform="rotate(-40 32 32)" fill="none" stroke="currentColor">
-    <path d="M3.5 32 A28.5 6.5 0 0 1 60.5 32" stroke-width="1.6" opacity=".5"/>
-    <circle cx="32" cy="32" r="12" stroke-width="2.6"/>
-    <circle cx="32" cy="32" r="16.5" stroke-width="1" opacity=".45"/>
-    <path d="M3.5 32 A28.5 6.5 0 0 0 60.5 32" stroke-width="3.2"/>
-  </g>
+  <path d="M32 7 53 19 32 31 11 19Z" fill="currentColor" fill-opacity=".28"/>
+  <path d="M11 19 32 31V56L11 44Z" fill="currentColor" fill-opacity=".55"/>
+  <path d="M32 31 53 19V44L32 56Z" fill="currentColor" fill-opacity=".88"/>
+  <path d="M18.5 46.5 25 50.2V40.4C25 36.4 18.5 32.7 18.5 36.7Z" fill="currentColor"/>
 </svg>`;
 
 export const esc = (s: unknown) =>
