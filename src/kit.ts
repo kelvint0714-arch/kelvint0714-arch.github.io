@@ -2,7 +2,7 @@
 // slit windows, friezes, merlons, onion domes, keels under floating islands, wheels — plus the
 // white traveller.
 
-import { Mesh, archShape, rect, type V3 } from './geometry';
+import { Mesh, archShape, earClip, rect, type V3 } from './geometry';
 
 /** Materials (their colours are in the palettes, src/palettes.ts). */
 export const M = {
@@ -30,6 +30,8 @@ export const M = {
   accent: 21,
   wall: 22,
   crow: 23,
+  inlay: 24,
+  banner: 25,
 } as const;
 
 export function kit(m: Mesh) {
@@ -206,7 +208,71 @@ export function kit(m: Mesh) {
       }
     }
   };
-  return { doorZ, doorX, slitZ, slitX, friezeZ, friezeX, crenels, dome, keel, island, wheel, runeRing, torus, tipped, rock, pagoda, onionZ, frame, vines };
+  // A string course: a thin band standing a little proud round a block.
+  const band = (x0: number, z0: number, x1: number, z1: number, y: number, h: number, part = 0, o = 0.05, mat: number = M.trim) =>
+    m.box([x0 - o, y, z0 - o], [x1 + o, y + h, z1 + o], mat, part);
+  // A cornice: a band, then an overhanging slab over it. Returns the height of its top.
+  const cornice = (x0: number, z0: number, x1: number, z1: number, y: number, part = 0, o = 0.12, mat: number = M.trim) => {
+    m.box([x0 - o * 0.45, y, z0 - o * 0.45], [x1 + o * 0.45, y + 0.12, z1 + o * 0.45], mat, part);
+    m.box([x0 - o, y + 0.12, z0 - o], [x1 + o, y + 0.3, z1 + o], mat, part);
+    return y + 0.3;
+  };
+  // An arched window with a sill, and a thin inlaid surround, on a +z or +x face.
+  const windowZ = (x: number, y: number, z: number, w: number, h: number, part = 0, mat: number = M.hole) => {
+    m.decal([x - 0.07, y - 0.02, z], [1, 0, 0], [0, 1, 0], archShape(0, 0, w + 0.14, h + 0.1), M.inlay, part);
+    m.decal([x, y, z + 0.002], [1, 0, 0], [0, 1, 0], archShape(0, 0, w, h), mat, part);
+    m.box([x - 0.1, y - 0.1, z], [x + w + 0.1, y, z + 0.1], M.trim, part);
+  };
+  const windowX = (x: number, y: number, z: number, w: number, h: number, part = 0, mat: number = M.hole) => {
+    m.decal([x, y - 0.02, z + 0.07], [0, 0, -1], [0, 1, 0], archShape(0, 0, w + 0.14, h + 0.1), M.inlay, part);
+    m.decal([x + 0.002, y, z], [0, 0, -1], [0, 1, 0], archShape(0, 0, w, h), mat, part);
+    m.box([x, y - 0.1, z - w - 0.1], [x + 0.1, y, z + 0.1], M.trim, part);
+  };
+  // An inlaid line on a +z or +x face (u along the face, v up).
+  const inlayZ = (x: number, y: number, z: number, w: number, h: number, part = 0) =>
+    m.decal([x, y, z], [1, 0, 0], [0, 1, 0], rect(0, 0, w, h), M.inlay, part);
+  const inlayX = (x: number, y: number, z: number, w: number, h: number, part = 0) =>
+    m.decal([x, y, z], [0, 0, -1], [0, 1, 0], rect(0, 0, w, h), M.inlay, part);
+  // A finial: a small orb on a waisted stem.
+  const finial = (c: V3, s: number, part = 0, mat: number = M.dome) =>
+    m.lathe(c, [[0.0001, 0], [0.07 * s, 0], [0.05 * s, 0.14 * s], [0.13 * s, 0.26 * s], [0.12 * s, 0.4 * s], [0.04 * s, 0.5 * s], [0.0001, 0.7 * s]], 8, mat, part);
+  // A lantern hanging `len` below a point.
+  const lantern = (c: V3, len: number, part = 0) => {
+    m.box([c[0] - 0.015, c[1] - len, c[2] - 0.015], [c[0] + 0.015, c[1], c[2] + 0.015], M.ink, part);
+    m.lathe([c[0], c[1] - len - 0.42, c[2]], [[0.0001, 0], [0.09, 0.05], [0.14, 0.2], [0.11, 0.36], [0.05, 0.42], [0.0001, 0.44]], 6, M.lamp, part);
+  };
+  // Merlons along one edge: along x (at z) or along z (at x), from a to b.
+  const parapet = (axis: 'x' | 'z', a: number, b: number, y: number, at: number, part = 0, s = 0.26, mat: number = M.stone) => {
+    for (let u = a; u <= b - s + 1e-6; u += s * 2) {
+      if (axis === 'x') m.box([u, y, at], [u + s, y + s * 0.95, at + s], mat, part);
+      else m.box([at, y, u], [at + s, y + s * 0.95, u + s], mat, part);
+    }
+  };
+  // A banner hanging flat against a +z face: `w` wide, `h` long, its foot cut in a swallowtail.
+  const bannerZ = (x: number, y: number, z: number, w: number, h: number, part = 0) => {
+    m.decal([x, y, z], [1, 0, 0], [0, 1, 0], [[0, 0], [w * 0.5, w * 0.45], [w, 0], [w, h], [0, h]].map(([u, v]) => [u, v - h] as [number, number]), M.banner, part);
+    m.box([x - 0.06, y - 0.02, z], [x + w + 0.06, y + 0.04, z + 0.06], M.ink, part);
+  };
+  // A slab of any outline (x, z, counter-clockwise in x–z, so its sides face outwards), from y0 up to y1.
+  const slab = (pts: [number, number][], y0: number, y1: number, mat: number, part = 0, top: number = mat) => {
+    for (const [i, j, l] of earClip(pts)) {
+      const a = pts[i], b = pts[j], c = pts[l];
+      m.tri([a[0], y1, a[1]], [c[0], y1, c[1]], [b[0], y1, b[1]], [0, 1, 0], top, part);
+      m.tri([a[0], y0, a[1]], [b[0], y0, b[1]], [c[0], y0, c[1]], [0, -1, 0], mat, part);
+    }
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i], q = pts[(i + 1) % pts.length];
+      const dx = q[0] - p[0], dz = q[1] - p[1], l = Math.hypot(dx, dz) || 1;
+      m.quad([p[0], y0, p[1]], [q[0], y0, q[1]], [q[0], y1, q[1]], [p[0], y1, p[1]], mat, part, [dz / l, 0, -dx / l]);
+    }
+  };
+  // A star's outline: `n` points, outer and inner radii, round (cx, cz).
+  const star = (cx: number, cz: number, n: number, r0: number, r1: number, turn = 0): [number, number][] =>
+    Array.from({ length: n * 2 }, (_, i) => {
+      const a = turn + (i / (n * 2)) * Math.PI * 2, r = i % 2 ? r1 : r0;
+      return [cx + r * Math.cos(a), cz + r * Math.sin(a)] as [number, number];
+    });
+  return { doorZ, doorX, slitZ, slitX, friezeZ, friezeX, crenels, dome, keel, island, wheel, runeRing, torus, tipped, rock, pagoda, onionZ, frame, vines, band, cornice, windowZ, windowX, inlayZ, inlayX, finial, lantern, parapet, bannerZ, slab, star };
 }
 
 function faceN(a: V3, b: V3, c: V3): V3 {

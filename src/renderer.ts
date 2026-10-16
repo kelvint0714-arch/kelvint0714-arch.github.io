@@ -67,7 +67,7 @@ export interface Puff {
 }
 
 export const MAX_PARTS = 24;
-export const MAX_MATS = 24;
+export const MAX_MATS = 32;
 
 // Screen axes of the isometric camera (it looks from +x +y +z towards the origin).
 const R: V3 = [Math.SQRT1_2, 0, -Math.SQRT1_2];
@@ -163,8 +163,9 @@ void main() {
     vec2 g = uMatGrad[vMat];
     c = mix(uRight[vMat], uTop[vMat], smoothstep(g.x, g.y, vW.y));
   } else {
-    // Faces turned away (seen through a gap) take the darkest tone.
-    vec3 w = max(n, 0.0);
+    // Faces turned away (seen through a gap) take the darkest tone. (Weights sharpened, so a face
+    // turned part way between two directions — a turning piece — keeps a clear tone of its own.)
+    vec3 w = pow(max(n, 0.0), vec3(2.5));
     float s = w.x + w.y + w.z;
     c = s > 1e-3 ? (uTop[vMat] * w.y + uLeft[vMat] * w.z + uRight[vMat] * w.x) / s : uRight[vMat] * 0.9;
     // Walls lighten a little towards the top (the light falls from above).

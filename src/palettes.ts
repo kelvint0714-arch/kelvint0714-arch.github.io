@@ -17,6 +17,9 @@ const flat = (c: string, extra: Partial<Material> = {}) => mat(c, c, c, extra);
 
 // Materials the great building doesn't use (the buildings behind the doors set their own).
 const EXTRA: Material[] = Array.from({ length: 11 }, () => flat('#888888'));
+// Inlaid lines and banners (after the materials above).
+const DAY_LAST: Material[] = [mat('#bfb4a2', '#9c9080', '#786d60'), mat('#d79a7b', '#c3826a', '#9e6655')];
+const DUSK_LAST: Material[] = [mat('#bcc5c8', '#8b9aa2', '#57666f'), mat('#86d8e2', '#62bccb', '#4697a6')];
 
 // Order matches M in src/kit.ts.
 export const DAY: Palette = {
@@ -36,12 +39,13 @@ export const DAY: Palette = {
     /* white   */ mat('#ffffff', '#f6f3ee', '#dcd7cf'),
     /* ink     */ flat('#2f2a26'),
     /* wood    */ mat('#8c8073', '#7c7064', '#62584e'),
-    /* penrose */ mat('#e1d9cb', '#bdb2a1', '#958a7b'),
+    /* penrose */ mat('#f5eee2', '#d8ccb8', '#a99881'),
     /* iron    */ mat('#5a534c', '#4b4540', '#3a3531'),
     /* floor   */ mat('#d8cfbf', '#b5aa98', '#8d8273', { tiles: true }),
     /* leaf    */ mat('#aab48f', '#8d9874', '#6c7657'),
     /* lamp    */ flat('#ffe1a0'),
     ...EXTRA,
+    ...DAY_LAST,
   ],
 };
 
@@ -62,12 +66,13 @@ export const DUSK: Palette = {
     /* white   */ mat('#ffffff', '#eef4f5', '#cfd9dc'),
     /* ink     */ flat('#192024'),
     /* wood    */ mat('#7f878b', '#6c7479', '#545c61'),
-    /* penrose */ mat('#dfe4e5', '#a3b0b6', '#6b7a82'),
+    /* penrose */ mat('#fbfdfd', '#ccd8dc', '#8798a0'),
     /* iron    */ mat('#2b343a', '#232b30', '#1b2227'),
     /* floor   */ mat('#dce1e2', '#a9b6bb', '#6e7e86', { tiles: true }),
     /* leaf    */ mat('#7fa59f', '#5f847f', '#43625e'),
     /* lamp    */ flat('#ffd98c'),
     ...EXTRA,
+    ...DUSK_LAST,
   ],
 };
 

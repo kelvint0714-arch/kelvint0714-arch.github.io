@@ -46,66 +46,79 @@ const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const lerp3 = (a: V3, b: V3, t: number): V3 => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 
-/** A piece's arrival; with `ry` it also turns (first turning, high up, then dropping into place). */
-type HubAssembly = Assembly & { ry?: number };
+/** A piece's arrival; with `ry` it also turns (first turning, high up, then dropping into place);
+ * with `grow` it unfolds out of the face it hangs from (scaled along that axis from its pivot), so
+ * it never passes through anything. */
+type HubAssembly = Assembly & { ry?: number; grow?: 0 | 1 | 2; anchorPart?: number };
 
-/** The great building's intro: when each piece arrives (s), whence, and how. The bridge swings
- * across last; then the traveller steps out of her door. */
+/** The great building coming back (s, at its own pace): the triangle first — its sides sliding in
+ * along their lengths, the corner closing it — then everything unfolding round it. */
 const ASSEMBLY: HubAssembly[] = [
-  { part: P.tower, at: 0.0, from: [0, -4, 0], fade: true, dur: 1.3 },
-  { part: P.twins, at: 0.3, from: [0, -4, 0], fade: true, dur: 1.3 },
-  { part: P.arch, at: 0.65, from: [0, -3, 0], fade: true, dur: 1.1 },
-  { part: P.loop, at: 0.85, from: [0, -4, 0], fade: true, dur: 1.2 },
-  { part: P.wing, at: 1.15, from: [3, 0, 0], fade: true, dur: 1.2 },
-  { part: P.hanging, at: 1.45, from: [0, 2.5, 0], fade: true, dur: 1.1 },
-  { part: P.pavilion, at: 1.6, from: [0, -2.5, 0], fade: true, dur: 1.2 },
-  { part: P.crank, at: 1.95, from: [-1.15, 0, 0], fade: false, dur: 0.7 },
-  { part: P.crankWheel, at: 1.95, from: [-1.15, 0, 0], fade: false, dur: 0.7 },
-  { part: P.ears, at: 2.15, from: [0, -2.3, 0], fade: false, dur: 0.8 },
-  // The triangle's beams slide in along their own lengths; the corner closes it.
-  { part: P.penrose, at: 2.0, from: [-3, 0, 0], fade: true, dur: 1.2 },
-  { part: P.penB, at: 2.2, from: [0, 3, 0], fade: true, dur: 1.2 },
-  { part: P.penC, at: 2.4, from: [0, 0, 3], fade: true, dur: 1.2 },
-  { part: P.penK, at: 3.5, from: [0, 0, 0], fade: true, dur: 0.4 },
-  // The bridge turns high over the gap, then drops into it.
-  { part: P.bridge, at: 2.6, from: [0, 2.8, 0], fade: false, dur: 1.2, ry: Math.PI / 2 },
+  { part: P.penrose, at: 0.0, from: [-3, 0, 0], fade: true, dur: 1.1 },
+  { part: P.penB, at: 0.15, from: [0, 3, 0], fade: true, dur: 1.1 },
+  { part: P.penC, at: 0.3, from: [0, 0, 3], fade: true, dur: 1.1 },
+  { part: P.penK, at: 1.15, from: [0, 0, 0], fade: true, dur: 0.35 },
+  ...unfolding(1.3, 1),
 ];
+
+/** Everything under the triangle, unfolding from `t0` (durations times `slow`): the pillar and the
+ * front block rise out of the mist, the back walks and the towers after them; the star settles on
+ * the pillar; the two stairs fold out of the front block up to the landings; the crank slides out
+ * of the block's face; the floating pieces drift in. */
+function unfolding(t0: number, slow: number): HubAssembly[] {
+  const at = (dt: number) => t0 + dt * slow;
+  return [
+    { part: P.pillar, at: at(0), from: [0, -5, 0], fade: true, dur: 1.2 * slow },
+    { part: P.front, at: at(0.15), from: [0, -4, 0], fade: true, dur: 1.1 * slow },
+    { part: P.backL, at: at(0.3), from: [0, -4, 0], fade: true, dur: 1.1 * slow },
+    { part: P.backR, at: at(0.4), from: [0, -4, 0], fade: true, dur: 1.1 * slow },
+    { part: P.twins, at: at(0.55), from: [0, -5, 0], fade: true, dur: 1.2 * slow },
+    { part: P.stairTower, at: at(0.65), from: [0, -5, 0], fade: true, dur: 1.2 * slow },
+    { part: P.star, at: at(0.8), from: [0, 1.6, 0], fade: true, dur: 0.8 * slow },
+    { part: P.stairL, at: at(1.0), from: [0, 0, 0], fade: false, dur: 0.9 * slow, grow: 0 },
+    { part: P.stairR, at: at(1.15), from: [0, 0, 0], fade: false, dur: 0.9 * slow, grow: 2 },
+    { part: P.crank, at: at(1.3), from: [0, 0, 0], fade: false, dur: 0.6 * slow, grow: 0 },
+    { part: P.crankWheel, at: at(1.3), from: [0, 0, 0], fade: false, dur: 0.6 * slow, grow: 0, anchorPart: P.crank },
+    { part: P.pavilion, at: at(0.9), from: [0, -2.5, 0], fade: true, dur: 1.1 * slow },
+    { part: P.hanging, at: at(1.0), from: [0, 2.5, 0], fade: true, dur: 1.1 * slow },
+    { part: P.isles, at: at(1.1), from: [0, -1.2, 0], fade: true, dur: 1.2 * slow },
+  ];
+}
 
 /** The opening, after Monument Valley's level openings (s): the sky alone and a title card; then
  * the world turns a quarter round into its angle as the camera draws back and the clouds part,
- * the pieces rising out of the mist as it turns; the bridge clicks across as the turn settles, the
- * impossible triangle appears with the alignment, the five places light up one by one, the
- * traveller steps out of her door, and the page comes in. */
+ * the triangle's three sides flying in loose as it turns; they close into the impossible triangle
+ * only as the turn settles, and then the building unfolds round it — the aqueduct down into the
+ * mist, the towers rising, the jetty and the stair folding out, the bridge clicking across. The
+ * five places light up one by one, the traveller steps out of her door, and the page comes in. */
 export const OPENING = {
   title: 0.4,
   titleOut: 3.0,
-  rise: 3.0,
-  turn: 2.6,
-  turnEnd: 8.2,
-  bridge: 7.2,
-  align: 7.9,
-  lights: 8.3,
-  walk: 8.8,
-  dawn: 8.9,
-  end: 10.4,
+  turn: 2.4,
+  turnEnd: 7.0,
+  align: 6.85,
+  unfold: 7.05,
+  lights: 9.5,
+  walk: 9.9,
+  dawn: 10.0,
+  end: 11.4,
 };
 export const INTRO_END = OPENING.end;
 /** The quarter turn, and the pull back: how far round the world starts, how near the camera. */
 const TURN = -Math.PI / 2;
-const NEAR = 1.55;
-/** What the world turns about, and the point the camera draws back from. */
-const AXIS: V3 = [5, 0, 3];
-const FOCUS: V3 = [5, 4.5, 3];
+const NEAR = 1.6;
+/** What the world turns about (the triangle's middle), and the point the camera draws back from. */
+const AXIS: V3 = [5, 0, 5];
+const FOCUS: V3 = [5, 7, 5];
 const easeSine = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 0.5 - 0.5 * Math.cos(Math.PI * t));
 const INTRO_ASSEMBLY: HubAssembly[] = [
-  ...ASSEMBLY.filter((a) => !PENROSE.includes(a.part) && a.part !== P.bridge).map((a) => ({ ...a, at: OPENING.rise + a.at * 1.45, dur: a.dur * 1.35 })),
-  { part: P.bridge, at: OPENING.bridge - 0.6, from: [0, 2.8, 0], fade: false, dur: 1.5, ry: Math.PI / 2 },
-  // The triangle's beams fly in while the world is still turning — three loose beams that don't
+  // The triangle's sides fly in while the world is still turning — three loose beams that don't
   // meet — and the corner closes it only as the turn settles: the moment it becomes impossible.
-  { part: P.penrose, at: 4.6, from: [-6, 0, 0], fade: true, dur: 2.2 },
-  { part: P.penB, at: 5.0, from: [0, 6, 0], fade: true, dur: 2.2 },
-  { part: P.penC, at: 5.4, from: [0, 0, 6], fade: true, dur: 2.2 },
+  { part: P.penrose, at: 3.4, from: [-7, 0, 0], fade: true, dur: 2.4 },
+  { part: P.penB, at: 3.8, from: [0, 7, 0], fade: true, dur: 2.4 },
+  { part: P.penC, at: 4.2, from: [0, 0, 7], fade: true, dur: 2.4 },
   { part: P.penK, at: OPENING.align, from: [0, 0, 0], fade: true, dur: 0.35 },
+  ...unfolding(OPENING.unfold, 1.25),
 ];
 /** Coming back to the overview the great building assembles this much faster than in the intro. */
 const RETURN_PACE = 2.4;
@@ -168,6 +181,9 @@ export class Valley {
   // Light: 0 day, 1 dusk, gliding when the system's appearance changes.
   private dark = 0;
   private darkTo = 0;
+  // The triangle's turn (radians) and its speed.
+  private spinAngle = 0;
+  private spinSpeed = 0;
   // The sky crossing from one building's world to the next.
   private skyFrom: Palette | null = null;
   private skyT0 = 0;
@@ -222,10 +238,21 @@ export class Valley {
     const unit: View = { origin: [0, 0, 0], scale: 1, cx: 0, cy: 0 };
     const floor = room ? -Infinity : blend(0).fog[0] + 2.5;
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    // (the turning triangle: all of the circle it sweeps)
+    const sp = room ? null : project(unit, this.world.spin);
+    let spinR = 0;
     for (let i = 0; i < data.length; i += 8) {
       if (data[i + 1] < floor) continue;
       const [px, py] = project(unit, [data[i], data[i + 1], data[i + 2]]);
+      if (sp && PENROSE.includes(data[i + 7])) {
+        spinR = Math.max(spinR, Math.hypot(px - sp[0], py - sp[1]));
+        continue;
+      }
       x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+    }
+    if (sp && spinR) {
+      x0 = Math.min(x0, sp[0] - spinR); x1 = Math.max(x1, sp[0] + spinR);
+      y0 = Math.min(y0, sp[1] - spinR); y1 = Math.max(y1, sp[1] + spinR);
     }
     const pal = room ? (t: number) => roomPalette(room.id, t) : blend;
     return { place, model, parts, pivots, assembly, extent: { x0, x1, y0, y1 }, room, pal };
@@ -263,7 +290,7 @@ export class Valley {
   private fitInto(def: Def, box: Box): View {
     const { x0, x1, y0, y1 } = def.extent;
     // (a section's small building floats with room round it)
-    const scale = Math.min(box.w / (x1 - x0), box.h / (y1 - y0)) * (def.room ? 0.86 : 1);
+    const scale = Math.min(box.w / (x1 - x0), box.h / (y1 - y0));
     return { origin: [0, 0, 0], scale, cx: box.x + box.w / 2 - ((x0 + x1) / 2) * scale, cy: box.y + box.h / 2 - ((y0 + y1) / 2) * scale };
   }
 
@@ -508,26 +535,32 @@ export class Valley {
     if (this.reduced) return {};
     const t = this.clock;
     const bob = (amp: number, period: number, phase: number) => Math.sin((t / period) * Math.PI * 2 + phase) * amp;
-    if (part === P.hanging) return { off: [0, bob(0.14, 6.5, 0), 0] };
+    if (part === P.hanging) return { off: [0, bob(0.16, 6.5, 0), 0] };
     if (part === P.pavilion) return { off: [0, bob(0.16, 7.5, 1.7), 0] };
-    if (PENROSE.includes(part)) return { off: [0, bob(0.22, 9, 3.1), 0] };
-    if (part === P.crankWheel) return { rx: (this.hotLevel.get('activity') ?? 0) * 0.35 };
+    if (part === P.isles) return { off: [0, bob(0.12, 5.5, 0.6), 0] };
+    if (part === P.crankWheel) return { rz: -(this.hotLevel.get('activity') ?? 0) * 0.5 };
     return {};
   }
 
   /** A part of a building this frame: its own motion, then assembling or sinking. */
-  private pose(st: Stage, part: number): { off: V3; rx: number; ry: number; rz: number; alpha: number } {
+  private pose(st: Stage, part: number): { off: V3; rx: number; ry: number; rz: number; alpha: number; scale: V3; anchor: V3 } {
     const def = st.def;
     const own: Pose = def.room ? (this.reduced ? {} : def.room.pose(part, this.clock - st.born, this.clock)) : this.hubPose(part);
     const off: V3 = own.off ? [own.off[0], own.off[1], own.off[2]] : [0, 0, 0];
     let ry = own.ry ?? 0;
     let alpha = 1;
+    const scale: V3 = [1, 1, 1];
+    let anchor: V3 = def.pivots[part] ?? [0, 0, 0];
     const list = this.intro && def.intro ? def.intro : def.assembly;
     const a = list.find((x) => x.part === part);
     const t = (this.clock - st.born) * st.pace;
     if (a && t < a.at + a.dur + 0.05) {
       const k = clamp01((t - a.at) / a.dur);
-      if (a.ry) {
+      if (a.grow !== undefined) {
+        // Unfolding out of the face it hangs from.
+        scale[a.grow] = Math.max(0.002, easeOut(k));
+        if (a.anchorPart !== undefined) anchor = def.pivots[a.anchorPart];
+      } else if (a.ry) {
         // Turning high over its place, then dropping into it (so it never turns through anything).
         ry += (1 - easeBack(k / 0.55)) * a.ry;
         const e = easeOut((k - 0.5) / 0.5);
@@ -547,7 +580,7 @@ export class Valley {
       off[1] -= 1.4 * easeIn(k);
       alpha *= 1 - easeIn(k);
     }
-    return { off, rx: own.rx ?? 0, ry, rz: own.rz ?? 0, alpha };
+    return { off, rx: own.rx ?? 0, ry, rz: own.rz ?? 0, alpha, scale, anchor };
   }
 
   /** A point carried with its part of the great building (a station on a floating piece floats). */
@@ -565,7 +598,7 @@ export class Valley {
       fx[i * 4 + 1] = 0;
     }
     for (let i = 0; i < st.def.parts; i++) {
-      const { off, rx, ry, rz, alpha } = this.pose(st, i);
+      const { off, rx, ry, rz, alpha, scale, anchor } = this.pose(st, i);
       const pv = st.def.pivots[i] ?? [0, 0, 0];
       const r = rotation(rx, ry, rz);
       let t: V3 = [
@@ -573,12 +606,25 @@ export class Valley {
         pv[1] + off[1] - (r[1] * pv[0] + r[4] * pv[1] + r[7] * pv[2]),
         pv[2] + off[2] - (r[2] * pv[0] + r[5] * pv[1] + r[8] * pv[2]),
       ];
+      if (scale[0] !== 1 || scale[1] !== 1 || scale[2] !== 1) {
+        // Unfolding: scaled about its anchor after its own motion (rows of the 3×3, and the shift).
+        for (let c = 0; c < 3; c++) for (let row = 0; row < 3; row++) r[c * 3 + row] *= scale[row];
+        t = [0, 1, 2].map((j) => scale[j] * (t[j] - anchor[j]) + anchor[j]) as V3;
+      }
       let rr = r;
+      if (!st.def.room && PENROSE.includes(i) && this.spinAngle) {
+        // The triangle turning about the line of sight through its middle: on screen, a plain turn.
+        const sp = this.world.spin;
+        const w = axisRotation([1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3)], this.spinAngle);
+        rr = mul3(w, rr);
+        const d: V3 = [t[0] - sp[0], t[1] - sp[1], t[2] - sp[2]];
+        t = [w[0] * d[0] + w[3] * d[1] + w[6] * d[2] + sp[0], w[1] * d[0] + w[4] * d[1] + w[7] * d[2] + sp[1], w[2] * d[0] + w[5] * d[1] + w[8] * d[2] + sp[2]];
+      }
       const yaw = st.def.room ? 0 : this.worldYaw();
       if (yaw) {
         // The whole world turned about its axis: W · (R, t).
         const w = rotation(0, yaw, 0);
-        rr = mul3(w, r);
+        rr = mul3(w, rr);
         const d: V3 = [t[0] - AXIS[0], t[1] - AXIS[1], t[2] - AXIS[2]];
         t = [w[0] * d[0] + w[3] * d[1] + w[6] * d[2] + AXIS[0], w[1] * d[0] + w[4] * d[1] + w[7] * d[2] + AXIS[1], w[2] * d[0] + w[5] * d[1] + w[8] * d[2] + AXIS[2]];
       }
@@ -615,7 +661,7 @@ export class Valley {
     const color = blend(this.dark).glow;
     return {
       beam: { quad: [at(from, 0.62, -1), at(from, 0.62, 1), at(to, 0.42, 1), at(to, 0.42, -1)], color, a: a * 0.9 },
-      glow: { at: to, r: 1.3 + 0.4 * hot, a: a * 0.9, color },
+      glow: { at: from, r: 1.1 + 0.4 * hot, a: a * 0.7, color },
     };
   }
 
@@ -740,6 +786,14 @@ export class Valley {
     if (this.dark !== this.darkTo) {
       this.dark += Math.sign(this.darkTo - this.dark) * Math.min(Math.abs(this.darkTo - this.dark), dt / 0.9);
       busy = true;
+    }
+    // The triangle turns once it has closed (slowly; faster while Research is pointed at).
+    {
+      const closed = !this.intro || this.clock - this.stage.born > OPENING.align + 0.3;
+      const want = this.reduced || !closed ? 0 : -(Math.PI * 2) / 56 * (1 + 2.2 * (this.hotLevel.get('research') ?? 0));
+      this.spinSpeed += (want - this.spinSpeed) * Math.min(1, dt * 0.9);
+      this.spinAngle += this.spinSpeed * dt;
+      if (Math.abs(this.spinSpeed) > 1e-4) busy = true;
     }
     // Hover fades.
     for (const s of this.world.stations) {
@@ -904,6 +958,17 @@ function clearPaths(list: HubAssembly[], solids: Solid[]): HubAssembly[] {
     done.push(...g);
   }
   return out;
+}
+
+/** A turn by `a` about the unit axis `u`, as a column-major 3×3 (Rodrigues). */
+function axisRotation(u: V3, a: number): number[] {
+  const c = Math.cos(a), s = Math.sin(a), t = 1 - c;
+  const [x, y, z] = u;
+  return [
+    t * x * x + c, t * x * y + s * z, t * x * z - s * y,
+    t * x * y - s * z, t * y * y + c, t * y * z + s * x,
+    t * x * z + s * y, t * y * z - s * x, t * z * z + c,
+  ];
 }
 
 /** Column-major 3×3 product a · b. */

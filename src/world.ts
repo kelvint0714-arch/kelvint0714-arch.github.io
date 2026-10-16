@@ -1,35 +1,41 @@
-// The valley: one impossible building, built block by block. Five stations sit on it — a door at the
-// foot of the twin towers (About), the rune on the tall tower's crown (Research), the door at the top
-// of the long stair (Projects), the crank under the walkway (Activity) and the pavilion floating
-// below (Contact) — with a white traveller who walks between them, and an impossible triangle
-// hanging in the sky.
+// The valley: a monument built round a pillar, under an impossible triangle. A loop of walls climbs
+// round the pillar — from the low block in front, up two long stairs to the side landings, and
+// along the back walks to the pillar's top, which is exactly where the loop's far corner is seen:
+// the walks arrive at the star on its crown though the pillar stands in the middle of the loop. Over
+// the star an impossible triangle turns slowly about the line of sight (so it stays impossible as it
+// turns), a column of light rising into it from the rune at the star's heart (Research). On the
+// side landings stand the twin domed towers (About) and the gate tower (Projects); the crank is on
+// the front block (Activity); a pavilion floats below (Contact). A white traveller walks between them.
 
 import { Mesh, rect, type Solid, type V3 } from './geometry';
 import { kit, M } from './kit';
 
 export { M };
 
-/** Parts: pieces that move as one (in the intro they assemble one after another). */
+/** Parts: pieces that move as one (in the intro they arrive one after another). */
 export const P = {
   world: 0,
-  tower: 1,
-  twins: 2,
-  arch: 3,
-  loop: 4,
-  wing: 5,
-  bridge: 6,
-  crank: 7,
-  crankWheel: 8,
-  pavilion: 9,
-  penrose: 10,
-  ears: 11,
-  hanging: 12,
-  penB: 13,
-  penC: 14,
-  penK: 15,
+  penrose: 1,
+  penB: 2,
+  penC: 3,
+  penK: 4,
+  front: 5,
+  pillar: 6,
+  twins: 7,
+  stairTower: 8,
+  stairL: 9,
+  stairR: 10,
+  crank: 11,
+  crankWheel: 12,
+  pavilion: 13,
+  hanging: 14,
+  isles: 15,
+  backL: 16,
+  backR: 17,
+  star: 18,
 } as const;
-export const PART_COUNT = 16;
-/** The impossible triangle's parts: its three beams, and the corner that closes it. */
+export const PART_COUNT = 19;
+/** The impossible triangle's parts: its three sides, and the corner that closes it. */
 export const PENROSE: number[] = [P.penrose, P.penB, P.penC, P.penK];
 
 export interface Station {
@@ -48,225 +54,276 @@ export interface World {
   mesh: Float32Array;
   /** Vertices from here on are drawn with back faces culled. */
   culledFrom: number;
-  /** Each part's pivot (for turning it). */
+  /** Each part's pivot (for turning it, or the face it unfolds from). */
   pivots: V3[];
   stations: Station[];
   bounds: { min: V3; max: V3 };
   solids: Solid[];
-  /** The impossible triangle: the joint over the tall tower that its light rises to, and the rune
-   * the light rises from. */
+  /** The light rising from the rune into the triangle's heart. */
   tether: { from: V3; to: V3 };
+  /** The point the triangle turns about (its axis runs along the line of sight through it). */
+  spin: V3;
 }
 
 export function buildWorld(): World {
   const m = new Mesh();
   const pivots: V3[] = Array.from({ length: PART_COUNT }, () => [0, 0, 0] as V3);
+  const k = kit(m);
+  const D = 12;            // how deep the walls go, into the mist
+  const N = 10;            // the loop's square, 0…N in x and z
+  const W = 1.7;           // the width of its walks
+  const F = 2.6;           // the front block's side
+  const HL = 4;            // the side landings' and back walks' height
+  const mid = N / 2;
+  // The pillar's crown is seen exactly where the loop's far corner (W/2, HL, W/2) is.
+  const HP = (N - W) / 2 + HL;
 
-  const { doorZ, doorX, slitZ, slitX, friezeZ, friezeX, crenels, dome, keel, wheel: wheelOn } = kit(m);
-
-  /* ── the tall tower (Research on its crown) ── */
-  m.box([0, -9, 0], [3, 9.6, 3], M.stone, P.tower);
-  m.box([-0.12, 9.6, -0.12], [3.12, 10, 3.12], M.trim, P.tower);
-  m.box([0, 10, 0], [3, 10.02, 3], M.floor, P.tower);
-  friezeZ(0, 3, 9.25, 3, P.tower);
-  friezeX(0, 3, 9.25, 3, P.tower);
-  // The stepped glyph on its right face, and slit windows.
-  for (let i = 0; i < 3; i++) {
-    m.decal([3, 6.2 + i * 0.32, 0.6 + i * 0.32], [0, 0, -1], [0, 1, 0], [[0, 0], [0.16, 0], [0.16, 1.1 - i * 0.32], [0, 1.1 - i * 0.32]], M.hole, P.tower);
+  /* ── the front block, the loop's low point ── */
+  {
+    const x0 = N - F, z0 = N - F;
+    m.box([x0, -D, z0], [N, 0, N], M.stone, P.front);
+    m.box([x0, -0.06, z0], [N, 0, N], M.floor, P.front);
+    k.band(x0, z0, N, N, -0.55, 0.1, P.front);
+    k.band(x0, z0, N, N, -4.2, 0.1, P.front);
+    k.friezeZ(x0, N, -0.4, N, P.front);
+    k.friezeX(z0, N, -0.4, N, P.front);
+    k.doorZ(x0 + 0.85, -3.3, N, 0.9, 1.6, M.hole, P.front);
+    k.windowZ(x0 + 1.0, -7.0, N, 0.5, 1.0, P.front);
+    k.windowX(N, -7.0, N - 1.05, 0.5, 1.0, P.front);
+    // a star inlaid on its top, where the two stairs begin
+    m.decal([x0 + F / 2, 0.004, z0 + F / 2], [1, 0, 0], [0, 0, -1], k.star(0, 0, 8, 0.85, 0.55, Math.PI / 8).map(([a, b]) => [a, -b] as [number, number]), M.inlay, P.front);
+    pivots[P.front] = [x0 + F / 2, 0, z0 + F / 2];
   }
-  slitZ(1.35, 7.1, 3, 0.3, 0.9, P.tower);
-  slitZ(1.35, 2.2, 3, 0.3, 0.9, P.tower);
-  slitX(3, 2.2, 1.85, 0.3, 0.9, P.tower);
-  // The rune: a square outline of light on the crown.
-  m.decal([0.9, 10.02, 2.1], [1, 0, 0], [0, 0, -1], rect(0, 0, 1.2, 1.2), M.glow, P.tower);
-  m.decal([1.08, 10.024, 1.92], [1, 0, 0], [0, 0, -1], rect(0, 0, 0.84, 0.84), M.floor, P.tower);
-  // Its two arched ears.
-  const ear = (x0: number, z0: number, face: 'z' | 'x') => {
-    m.box([x0, 10.02, z0], [x0 + 1, 12.3, z0 + 1], M.stone, P.ears);
-    m.box([x0 + 0.2, 12.3, z0 + 0.2], [x0 + 0.8, 12.6, z0 + 0.8], M.stone, P.ears);
-    m.box([x0 + 0.35, 12.6, z0 + 0.35], [x0 + 0.65, 12.85, z0 + 0.65], M.stone, P.ears);
-    if (face === 'z') doorZ(x0 + 0.2, 10.02, z0 + 1, 0.6, 1.5, M.hole, P.ears);
-    else doorX(x0 + 1, 10.02, z0 + 0.8, 0.6, 1.5, M.hole, P.ears);
+
+  /* ── the two long stairs, up from the front block to the side landings ── */
+  const steps = 16, rise = HL / steps, run = (N - F - W) / steps;
+  {
+    // left: along the front edge (z near N), climbing towards −x
+    for (let i = 0; i < steps; i++) {
+      const xa = W + i * run;
+      m.box([xa, -D, N - W], [xa + run, HL - (i + 1) * rise, N], M.stone, P.stairL);
+    }
+    k.inlayZ(W, -1.2, N, N - F - W, 0.06, P.stairL);
+    for (let x = W + 0.5; x < N - F - 0.6; x += 1.15) k.slitZ(x, -2.6, N, 0.18, 0.5, P.stairL);
+    pivots[P.stairL] = [N - F, 0, N - W / 2];
+    // right: along the right edge (x near N), climbing towards −z
+    for (let i = 0; i < steps; i++) {
+      const za = W + i * run;
+      m.box([N - W, -D, za], [N, HL - (i + 1) * rise, za + run], M.stone, P.stairR);
+    }
+    k.inlayX(N, -1.2, N - F, N - F - W, 0.06, P.stairR);
+    for (let z = N - F - 0.5; z > W + 0.6; z -= 1.15) k.slitX(N, -2.6, z, 0.18, 0.5, P.stairR);
+    pivots[P.stairR] = [N - W / 2, 0, N - F];
+  }
+
+  /* ── the side landings, and the back walks on their arcades, meeting behind the pillar ── */
+  const arcade = (u0: number, u1: number, top: number): [number, number][] => {
+    const pts: [number, number][] = [[u0, top], [u0, -D]];
+    const n = 2, pier = 0.8;
+    const span = (u1 - u0 - pier * (n + 1)) / n;
+    for (let i = 0; i < n; i++) {
+      const a = u0 + pier + i * (span + pier), b = a + span, r = span / 2, spring = top - 1.2 - r;
+      pts.push([a, -D], [a, spring]);
+      for (let j = 1; j < 14; j++) {
+        const ang = Math.PI - (j / 14) * Math.PI;
+        pts.push([a + r + r * Math.cos(ang), spring + r * Math.sin(ang)]);
+      }
+      pts.push([b, spring], [b, -D]);
+    }
+    pts.push([u1, -D], [u1, top]);
+    return pts;
   };
-  ear(0, 2, 'z');
-  ear(2, 0, 'x');
-  pivots[P.tower] = [1.5, 0, 1.5];
-
-  /* ── the twin towers (About at their foot) ── */
-  m.box([0, -8, 6], [3, 10.6, 7.4], M.stone, P.twins);
-  m.box([-0.1, 10.4, 5.9], [3.1, 10.75, 7.5], M.trim, P.twins);
-  for (const x of [0.05, 1.65]) {
-    m.box([x, 10.75, 6.05], [x + 1.3, 11.6, 7.35], M.stone, P.twins);
-    dome([x + 0.65, 11.6, 6.7], 0.62, 1.15, P.twins);
-    slitZ(x + 0.5, 10.95, 7.35, 0.3, 0.5, P.twins);
+  {
+    // left landing and back-left walk (x from 0 to W, z from N down to 0)
+    m.box([0, -D, N - W], [W, HL, N], M.stone, P.backL);
+    m.extrude(arcade(W, N - W, HL), 'zy', 0.12, W - 0.12, M.stone, P.backL, true);
+    m.box([0, HL - 0.5, W], [W, HL, N - W], M.stone, P.backL);
+    m.box([0, HL - 0.04, 0], [W, HL, N], M.floor, P.backL);
+    k.band(0, N - W, W, N, HL - 0.55, 0.1, P.backL);
+    k.windowZ(0.62, HL - 2.4, N, 0.46, 0.95, P.backL);
+    m.decal([W / 2, HL + 0.004, N - W / 2], [1, 0, 0], [0, 0, -1], k.star(0, 0, 4, 0.55, 0.3, Math.PI / 4).map(([a, b]) => [a, -b] as [number, number]), M.inlay, P.backL);
+    pivots[P.backL] = [W / 2, HL, N];
+    // right landing and back-right walk (z from 0 to W, x from N down to 0), with the far corner
+    m.box([N - W, -D, 0], [N, HL, W], M.stone, P.backR);
+    m.extrude(arcade(W, N - W, HL), 'xy', 0.12, W - 0.12, M.stone, P.backR, true);
+    m.box([W, HL - 0.5, 0], [N - W, HL, W], M.stone, P.backR);
+    m.box([0, -D, 0], [W, HL, W], M.stone, P.backR);
+    m.box([0, HL - 0.04, 0], [N, HL, W], M.floor, P.backR);
+    k.band(N - W, 0, N, W, HL - 0.55, 0.1, P.backR);
+    k.windowX(N, HL - 2.4, W - 0.62, 0.46, 0.95, P.backR);
+    m.decal([N - W / 2, HL + 0.004, W / 2], [1, 0, 0], [0, 0, -1], k.star(0, 0, 4, 0.55, 0.3, Math.PI / 4).map(([a, b]) => [a, -b] as [number, number]), M.inlay, P.backR);
+    pivots[P.backR] = [N, HL, W / 2];
   }
-  friezeZ(0, 3, 10.05, 7.4, P.twins);
-  slitZ(0.6, 7.2, 7.4, 0.26, 1.0, P.twins);
-  slitZ(2.1, 7.2, 7.4, 0.26, 1.0, P.twins);
-  slitX(3, 7.2, 6.95, 0.26, 1.0, P.twins);
-  // The ledge and the door where the traveller lives.
-  m.box([0.2, -0.45, 7.4], [2.8, 0, 8.7], M.stone, P.twins);
-  friezeZ(0.2, 2.8, -0.38, 8.7, P.twins);
-  doorZ(1.0, 0, 7.4, 1.0, 1.55, M.wood, P.twins);
-  m.decal([1.48, 0.05, 7.405], [1, 0, 0], [0, 1, 0], rect(0, 0, 0.04, 1.2), M.hole, P.twins);
-  pivots[P.twins] = [1.5, 0, 6.7];
 
-  /* ── the beam between them, high up ── */
-  m.box([0.6, 8.3, 3], [2.4, 9.0, 6], M.stone, P.twins);
-  friezeX(3, 6, 8.42, 2.4, P.twins);
-
-  /* ── the great arch between the towers, its top a walk ── */
-  const Y = 5.6;
-  const archProfile: [number, number][] = [[3, Y], [3, 2.2]];
-  for (let i = 0; i <= 14; i++) {
-    const a = Math.PI - (i / 14) * Math.PI;
-    archProfile.push([4.5 + 1.5 * Math.cos(a), 2.2 + 1.5 * Math.sin(a)]);
+  /* ── the pillar in the middle of the loop, crowned with an eight-point star (Research) ── */
+  {
+    const r = 1.25;
+    m.lathe([mid, -D, mid], [[r, 0], [r, D + HP - 0.75], [0.0001, D + HP - 0.75]], 8, M.stone, P.pillar, Math.PI / 8);
+    for (const y of [-4, 0, HP - 2.2]) m.lathe([mid, y, mid], [[r + 0.08, 0], [r + 0.08, 0.14], [0.0001, 0.14]], 8, M.trim, P.pillar, Math.PI / 8);
+    // its capital, stepping out to the star
+    m.lathe([mid, HP - 0.75, mid], [[r + 0.15, 0], [r + 0.15, 0.2], [r + 0.4, 0.2], [r + 0.4, 0.4], [0.0001, 0.4]], 8, M.trim, P.pillar, Math.PI / 8);
+    pivots[P.pillar] = [mid, 0, mid];
+    // the star: a cream slab, a golden star laid in it, and the rune at its heart
+    k.slab(k.star(mid, mid, 8, 2.15, 1.5, Math.PI / 8), HP - 0.35, HP, M.trim, P.star, M.floor);
+    m.decal([mid, HP + 0.004, mid], [1, 0, 0], [0, 0, -1], k.star(0, 0, 8, 1.55, 1.08, Math.PI / 8).map(([a, b]) => [a, -b] as [number, number]), M.gold, P.star);
+    m.decal([mid, HP + 0.008, mid], [1, 0, 0], [0, 0, -1], k.star(0, 0, 8, 1.2, 0.86, Math.PI / 8).map(([a, b]) => [a, -b] as [number, number]), M.floor, P.star);
+    m.decal([mid - 0.38, HP + 0.012, mid + 0.38], [1, 0, 0], [0, 0, -1], rect(0, 0, 0.76, 0.76), M.glow, P.star);
+    m.decal([mid - 0.24, HP + 0.016, mid + 0.24], [1, 0, 0], [0, 0, -1], rect(0, 0, 0.48, 0.48), M.hole, P.star);
+    pivots[P.star] = [mid, HP, mid];
   }
-  archProfile.push([6, 2.2], [6, Y]);
-  m.extrude(archProfile, 'zy', 0.2, 2.8, M.stone, P.arch, true);
-  m.box([0.2, Y, 3], [2.8, Y + 0.12, 6], M.floor, P.arch);
-  pivots[P.arch] = [1.5, 4, 4.5];
 
-  /* ── the walkway loop round the tall tower, on two great legs ── */
-  m.box([3, Y - 0.6, 0.3], [7.2, Y, 1.7], M.stone, P.loop);
-  m.box([5.8, Y - 0.6, 1.7], [7.2, Y, 6.2], M.stone, P.loop);
-  m.box([2.8, Y - 0.6, 4.8], [5.8, Y, 6.2], M.stone, P.loop);
-  m.box([3, Y, 0.3], [7.2, Y + 0.12, 1.7], M.floor, P.loop);
-  m.box([5.8, Y, 1.7], [7.2, Y + 0.12, 6.2], M.floor, P.loop);
-  m.box([2.8, Y, 4.8], [5.8, Y + 0.12, 6.2], M.floor, P.loop);
-  friezeX(0.3, 6.2, Y - 0.42, 7.2, P.loop);
-  friezeZ(2.8, 7.2, Y - 0.42, 6.2, P.loop);
-  // The legs, joined by an arch, going down into the mist.
-  m.box([5.8, -9, 0.3], [7.2, Y - 0.6, 1.7], M.stone, P.loop);
-  m.box([5.8, -9, 4.8], [7.2, Y - 0.6, 6.2], M.stone, P.loop);
-  const legArch: [number, number][] = [[1.7, Y - 0.6], [1.7, 2.6]];
-  for (let i = 0; i <= 14; i++) {
-    const a = (i / 14) * Math.PI;
-    legArch.push([3.25 + 1.55 * Math.cos(Math.PI - a), 2.6 + 1.55 * Math.sin(Math.PI - a)]);
+  /* ── the twin towers, beside the left landing (About at their door) ── */
+  {
+    const x0 = -3.0, x1 = 0, z0 = N - 2.3, z1 = N;
+    const top = HL + 6.2;
+    m.box([x0, -D, z0], [x1, top, z1], M.stone, P.twins);
+    k.band(x0, z0, x1, z1, HL - 0.1, 0.12, P.twins);
+    k.band(x0, z0, x1, z1, HL + 3.3, 0.1, P.twins);
+    k.band(x0, z0, x1, z1, -1.2, 0.1, P.twins);
+    const capTop = k.cornice(x0, z0, x1, z1, top, P.twins);
+    k.friezeZ(x0, x1, top - 0.4, z1, P.twins);
+    k.friezeX(z0, z1, top - 0.4, x1, P.twins);
+    k.doorX(x1, HL, z0 + 1.55, 0.8, 1.45, M.wood, P.twins);
+    m.decal([x1 + 0.004, HL + 0.05, z0 + 1.17], [0, 0, -1], [0, 1, 0], rect(0, 0, 0.04, 1.1), M.hole, P.twins);
+    for (const u of [x0 + 0.45, x0 + 2.15]) {
+      for (const y of [HL + 1.2, HL + 4.1, 0.2, -3.4]) k.windowZ(u, y, z1, 0.4, 0.85, P.twins);
+    }
+    k.windowX(x1, HL + 4.1, z0 + 1.3, 0.4, 0.85, P.twins);
+    k.bannerZ(x0 + 1.25, top - 0.12, z1, 0.5, 2.2, P.twins);
+    for (const [a, b] of [[x0 + 0.1, x0 + 1.4], [x1 - 1.4, x1 - 0.1]] as [number, number][]) {
+      const c: V3 = [(a + b) / 2, capTop, (z0 + z1) / 2];
+      m.box([a, capTop, z0 + 0.12], [b, capTop + 1.1, z1 - 0.12], M.stone, P.twins);
+      k.cornice(a, z0 + 0.12, b, z1 - 0.12, capTop + 1.1, P.twins, 0.08);
+      k.doorZ(c[0] - 0.17, capTop + 0.2, z1 - 0.12, 0.34, 0.65, M.hole, P.twins);
+      k.doorX(b, capTop + 0.2, c[2] + 0.17, 0.34, 0.65, M.hole, P.twins);
+      k.dome([c[0], capTop + 1.4, c[2]], 0.62, 1.15, P.twins);
+      k.finial([c[0], capTop + 2.75, c[2]], 0.5, P.twins);
+    }
+    pivots[P.twins] = [(x0 + x1) / 2, 0, (z0 + z1) / 2];
   }
-  legArch.push([4.8, 2.6], [4.8, Y - 0.6]);
-  m.extrude(legArch, 'zy', 5.8, 7.2, M.stone, P.loop, true);
-  slitX(7.2, 0.6, 1.25, 0.3, 0.8, P.loop);
-  slitX(7.2, 0.6, 5.75, 0.3, 0.8, P.loop);
-  slitZ(6.35, 0.6, 6.2, 0.3, 0.8, P.loop);
-  pivots[P.loop] = [6.5, 2, 3.2];
 
-  /* ── the stair wing (Projects at its head) ── */
-  const WX0 = 12.4, WX1 = 13.9;
-  m.box([WX0, -1.4, 1.2], [WX1, 0.2, 9.0], M.stone, P.wing);
-  friezeX(1.2, 9.0, -0.15, WX1, P.wing);
-  for (let z = 2.4; z < 8.6; z += 1.3) slitX(WX1, -1.05, z, 0.24, 0.6, P.wing);
-  // The stair, rising towards the head.
-  const steps = 14;
-  for (let i = 0; i < steps; i++) {
-    const z1 = 9.0 - i * 0.5;
-    m.box([WX0 + 0.15, 0.2, z1 - 0.5], [WX1, 0.2 + (i + 1) * 0.38, z1], M.stone, P.wing);
+  /* ── the gate tower, beside the right landing (Projects at its door) ── */
+  const GX0 = N - 2.3, GX1 = N, GZ0 = -3.0, GZ1 = 0;
+  {
+    const top = HL + 7.4;
+    m.box([GX0, -D, GZ0], [GX1, top, GZ1], M.stone, P.stairTower);
+    k.band(GX0, GZ0, GX1, GZ1, HL - 0.1, 0.12, P.stairTower);
+    k.band(GX0, GZ0, GX1, GZ1, HL + 3.6, 0.1, P.stairTower);
+    k.band(GX0, GZ0, GX1, GZ1, -1.2, 0.1, P.stairTower);
+    const capTop = k.cornice(GX0, GZ0, GX1, GZ1, top, P.stairTower);
+    k.crenels(GX0 - 0.12, GZ0 - 0.12, GX1 + 0.12, GZ1 + 0.12, capTop, P.stairTower, 0.27);
+    k.friezeZ(GX0, GX1, top - 0.45, GZ1, P.stairTower);
+    k.friezeX(GZ0, GZ1, top - 0.45, GX1, P.stairTower);
+    k.doorZ(GX0 + 0.7, HL, GZ1, 0.9, 1.6, M.hole, P.stairTower);
+    for (const y of [HL + 4.3, HL + 6.3, 0.2, -3.4]) k.windowX(GX1, y, GZ1 - 0.75, 0.44, 0.9, P.stairTower);
+    k.windowZ(GX0 + 0.93, HL + 4.3, GZ1, 0.44, 0.9, P.stairTower);
+    k.bannerZ(GX0 + 0.5, top - 0.12, GZ1, 0.42, 1.8, P.stairTower);
+    k.lantern([GX1 - 0.3, HL + 2.2, GZ1 + 0.2], 0.3, P.stairTower);
+    m.box([GX1 - 0.35, HL + 2.18, GZ1], [GX1 - 0.25, HL + 2.24, GZ1 + 0.24], M.ink, P.stairTower);
+    pivots[P.stairTower] = [(GX0 + GX1) / 2, 0, (GZ0 + GZ1) / 2];
   }
-  // The head: a tower, its door opening onto the top step.
-  const HT = 0.2 + steps * 0.38;
-  const HH = HT + 2.3;
-  m.box([WX0, -6, -0.6], [WX1, HH, 2.0], M.stone, P.wing);
-  m.box([WX0 - 0.1, HH - 0.3, -0.7], [WX1 + 0.1, HH, 2.1], M.trim, P.wing);
-  crenels(WX0 - 0.1, -0.7, WX1 + 0.1, 2.1, HH, P.wing, 0.3);
-  doorZ(WX0 + 0.35, HT, 2.0, 0.8, 1.45, M.hole, P.wing);
-  slitX(WX1, HT + 0.3, 0.9, 0.26, 0.9, P.wing);
-  slitX(WX1, 1.2, 0.9, 0.26, 0.9, P.wing);
-  friezeX(-0.6, 2.0, HH - 0.75, WX1, P.wing);
-  friezeZ(WX0, WX1, HH - 0.75, 2.0, P.wing);
-  // Under its low end, a hanging turret.
-  m.box([WX0 + 0.15, -4.0, 6.8], [WX1 - 0.15, -1.4, 8.4], M.stone, P.wing);
-  slitZ(WX0 + 0.6, -3.0, 8.4, 0.26, 0.8, P.wing);
-  m.box([WX0 + 0.05, -4.3, 6.7], [WX1 - 0.05, -4.0, 8.5], M.trim, P.wing);
-  keel([(WX0 + WX1) / 2, -4.3, 7.6], 0.72, 1.4, P.wing);
-  pivots[P.wing] = [(WX0 + WX1) / 2, 0, 4];
 
-  /* ── the crank on the stair head's right face (Activity) ── */
-  m.box([WX1, 0.35, 0.15], [WX1 + 1.15, 1.5, 1.25], M.iron, P.crank);
-  m.box([WX1 - 0.05, 1.5, 0.1], [WX1 + 1.2, 1.6, 1.3], M.trim, P.crank);
-  pivots[P.crank] = [WX1 + 0.6, 0.9, 0.7];
-  // Its wheel on the right face: a ring with four spokes and a handle.
-  const wc: V3 = [WX1 + 1.15, 0.93, 0.7];
-  wheelOn(wc, 'x', 0.54, 4, M.glow, P.crankWheel);
+  /* ── the crank on the front block (Activity) ── */
+  const CY = -1.7, CZ = N - F / 2;
+  m.box([N, CY - 0.5, CZ - 0.5], [N + 0.7, CY + 0.5, CZ + 0.5], M.iron, P.crank);
+  m.box([N, CY + 0.5, CZ - 0.56], [N + 0.76, CY + 0.6, CZ + 0.56], M.trim, P.crank);
+  pivots[P.crank] = [N, CY, CZ];
+  const wc: V3 = [N + 0.7, CY, CZ];
+  k.wheel(wc, 'x', 0.42, 6, M.glow, P.crankWheel);
   pivots[P.crankWheel] = wc;
 
-  /* ── the bridge that turns into place between the loop and the stair head ── */
-  m.box([7.2, Y - 0.35, 0.35], [WX0, Y, 1.65], M.stone, P.bridge);
-  m.box([7.2, Y, 0.35], [WX0, Y + 0.12, 1.65], M.floor, P.bridge);
-  pivots[P.bridge] = [(7.2 + WX0) / 2, Y, 1.0];
-
-  /* ── a small hanging piece on the left ── */
-  m.box([-2.6, 2.2, 9.0], [-1.0, 4.4, 10.6], M.stone, P.hanging);
-  m.box([-2.7, 4.4, 8.9], [-0.9, 4.6, 10.7], M.trim, P.hanging);
-  doorZ(-2.2, 2.6, 10.6, 0.7, 1.2, M.hole, P.hanging);
-  m.box([-2.7, 1.9, 8.9], [-0.9, 2.2, 10.7], M.trim, P.hanging);
-  keel([-1.8, 1.9, 9.8], 0.7, 1.3, P.hanging);
-  pivots[P.hanging] = [-1.8, 3, 9.8];
-
-  /* ── the pavilion floating below (Contact) ── */
-  const PC: V3 = [3.2, -4.6, 11.4];
+  /* ── the pavilion floating below, in front (Contact) ── */
+  const PC: V3 = [4.0, 0.9, 7.0];
   m.box([PC[0] - 1.3, PC[1] - 0.35, PC[2] - 1.3], [PC[0] + 1.3, PC[1], PC[2] + 1.3], M.stone, P.pavilion);
   m.box([PC[0] - 1.3, PC[1], PC[2] - 1.3], [PC[0] + 1.3, PC[1] + 0.08, PC[2] + 1.3], M.floor, P.pavilion);
-  friezeZ(PC[0] - 1.3, PC[0] + 1.3, PC[1] - 0.28, PC[2] + 1.3, P.pavilion);
-  friezeX(PC[2] - 1.3, PC[2] + 1.3, PC[1] - 0.28, PC[0] + 1.3, P.pavilion);
+  k.friezeZ(PC[0] - 1.3, PC[0] + 1.3, PC[1] - 0.28, PC[2] + 1.3, P.pavilion);
+  k.friezeX(PC[2] - 1.3, PC[2] + 1.3, PC[1] - 0.28, PC[0] + 1.3, P.pavilion);
   for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
     const x = PC[0] + dx * 1.0, z = PC[2] + dz * 1.0;
-    m.box([x - 0.16, PC[1] + 0.08, z - 0.16], [x + 0.16, PC[1] + 2.1, z + 0.16], M.stone, P.pavilion);
+    m.box([x - 0.15, PC[1] + 0.08, z - 0.15], [x + 0.15, PC[1] + 2.1, z + 0.15], M.stone, P.pavilion);
+    m.box([x - 0.2, PC[1] + 0.08, z - 0.2], [x + 0.2, PC[1] + 0.3, z + 0.2], M.trim, P.pavilion);
   }
-  m.box([PC[0] - 1.3, PC[1] + 2.1, PC[2] - 1.3], [PC[0] + 1.3, PC[1] + 2.45, PC[2] + 1.3], M.trim, P.pavilion);
-  // Its crown: a faceted spire.
-  m.lathe([PC[0], PC[1] + 2.45, PC[2]], [[1.05, 0], [0.95, 0.35], [0.55, 1.0], [0.0001, 1.75]], 4, M.dome, P.pavilion, Math.PI / 4);
-  // Its lantern, hanging in the middle.
+  // its arched heads between the columns, on the two faces seen
+  for (const [o, axis] of [[PC[2] + 1.15, 'z'], [PC[0] + 1.15, 'x']] as [number, 'x' | 'z'][]) {
+    const shape: [number, number][] = [[-1.15, 2.1], [-1.15, 1.55]];
+    for (let j = 0; j <= 12; j++) {
+      const a = Math.PI - (j / 12) * Math.PI;
+      shape.push([0.85 * Math.cos(a), 1.55 + 0.42 * Math.sin(a)]);
+    }
+    shape.push([1.15, 1.55], [1.15, 2.1]);
+    if (axis === 'z') m.extrude(shape.map(([u, v]) => [PC[0] + u, PC[1] + v] as [number, number]), 'xy', o - 0.15, o, M.stone, P.pavilion, true);
+    else m.extrude(shape.map(([u, v]) => [PC[2] - u, PC[1] + v] as [number, number]), 'zy', o - 0.15, o, M.stone, P.pavilion, true);
+  }
+  k.cornice(PC[0] - 1.25, PC[2] - 1.25, PC[0] + 1.25, PC[2] + 1.25, PC[1] + 2.1, P.pavilion, 0.12);
+  m.lathe([PC[0], PC[1] + 2.4, PC[2]], [[1.05, 0], [0.95, 0.35], [0.55, 1.0], [0.0001, 1.75]], 4, M.dome, P.pavilion, Math.PI / 4);
+  k.finial([PC[0], PC[1] + 4.12, PC[2]], 0.45, P.pavilion);
   m.box([PC[0] - 0.02, PC[1] + 1.45, PC[2] - 0.02], [PC[0] + 0.02, PC[1] + 2.1, PC[2] + 0.02], M.ink, P.pavilion);
   m.lathe([PC[0], PC[1] + 1.05, PC[2]], [[0.0001, 0], [0.16, 0.12], [0.16, 0.3], [0.0001, 0.42]], 6, M.glow, P.pavilion);
-  keel([PC[0], PC[1] - 0.35, PC[2]], 0.9, 1.2, P.pavilion);
+  k.keel([PC[0], PC[1] - 0.35, PC[2]], 0.9, 1.2, P.pavilion);
   pivots[P.pavilion] = PC;
 
-  /* ── the impossible triangle ── */
-  // Hung over the building's crown, its lowest joint above the tall tower's rune, light rising
-  // between them. Three beams along x, then y, then z: the way back to the start is (L, L, L),
-  // straight down the line of sight, so on screen the triangle closes. The corner that closes it,
-  // nearest the eye, leaves its right face open (drawn with back faces culled, last in the mesh),
-  // so the first beam shows through it and seems to run on into the corner. It is set far back
-  // along the line of sight, so it never hides the building.
-  const TO: V3 = [-13.5, 3.9, -8.4];
-  const L = 6.2, t = 1.05;
-  m.box([TO[0], TO[1], TO[2]], [TO[0] + L, TO[1] + t, TO[2] + t], M.penrose, P.penrose);
-  m.box([TO[0] + L - t, TO[1] + t, TO[2]], [TO[0] + L, TO[1] + L, TO[2] + t], M.penrose, P.penB);
-  m.box([TO[0] + L - t, TO[1] + L - t, TO[2] + t], [TO[0] + L, TO[1] + L, TO[2] + L - t], M.penrose, P.penC);
-  const centre: V3 = [TO[0] + L / 2, TO[1] + L / 2, TO[2] + L / 2];
-  for (const part of [P.penrose, P.penB, P.penC, P.penK]) pivots[part] = centre;
-  const penroseFrom = m.count;
-  m.box([TO[0] + L - t, TO[1] + L - t, TO[2] + L - t], [TO[0] + L, TO[1] + L, TO[2] + L], M.penrose, P.penK, 'px');
-  const joint: V3 = [TO[0] + L - t / 2, TO[1] + t / 2, TO[2] + t / 2];
+  /* ── small stones drifting about ── */
+  for (const [c, s] of [[[-6.2, 1.0, 12.0], 0.5], [[15.6, 9.0, -1.0], 0.42], [[-3.0, 14.6, 2.0], 0.36], [[6.0, -4.0, 16.6], 0.34], [[19.0, 4.0, 3.0], 0.3]] as [V3, number][]) {
+    m.box([c[0] - s, c[1] - s * 0.4, c[2] - s], [c[0] + s, c[1] + s * 0.4, c[2] + s], M.stone, P.isles);
+    k.keel([c[0], c[1] - s * 0.4, c[2]], s * 0.8, s * 1.4, P.isles);
+  }
+  pivots[P.isles] = [5, 3, 5];
+
+  /* ── the impossible triangle, high over the star ── */
+  // Three beams along x, then y, then z: the way back to the start is (L, L, L), straight down the
+  // line of sight, so on screen it closes. It turns about the line of sight through its middle,
+  // which on screen is a plain turn of its picture: it stays impossible all the way round. It is
+  // set back along the line of sight, behind the building, its middle seen over the star.
+  const L = 9.5, T = 1.3;
+  const H = HP + 7.6;       // the height over the pillar its middle is seen at
+  const back = 9;           // how far back along the line of sight
+  const g: V3 = [(2 * L - T / 2) / 3, (L + T / 2) / 3, T / 2];   // its middle, from its first corner
+  const TO: V3 = [mid - g[0] - back, H - g[1] - back, mid - g[2] - back];
+  const spin: V3 = [TO[0] + g[0], TO[1] + g[1], TO[2] + g[2]];
+  m.box([TO[0], TO[1], TO[2]], [TO[0] + L, TO[1] + T, TO[2] + T], M.penrose, P.penrose);
+  m.box([TO[0] + L - T, TO[1] + T, TO[2]], [TO[0] + L, TO[1] + L, TO[2] + T], M.penrose, P.penB);
+  m.box([TO[0] + L - T, TO[1] + L - T, TO[2] + T], [TO[0] + L, TO[1] + L, TO[2] + L - T], M.penrose, P.penC);
+  // inlaid lines along its faces: the only ornament it needs
+  const inl = 0.05;
+  k.inlayZ(TO[0] + T + 0.3, TO[1] + T / 2 - inl / 2, TO[2] + T, L - 2 * T - 0.6, inl, P.penrose);
+  k.inlayX(TO[0] + L, TO[1] + T + 0.3, TO[2] + T / 2 + inl / 2, inl, L - 2 * T - 0.6, P.penB);
+  k.inlayX(TO[0] + L, TO[1] + L - T / 2 - inl / 2, TO[2] + L - T - 0.3, L - 2 * T - 0.6, inl, P.penC);
+  for (const part of PENROSE) pivots[part] = spin;
+
+  /* ── the corner that closes the triangle: last, drawn with back faces culled ── */
+  // Nearest the eye, it leaves its right face open, so the first beam shows through it and seems
+  // to run on into it.
+  const culledFrom = m.count;
+  m.box([TO[0] + L - T, TO[1] + L - T, TO[2] + L - T], [TO[0] + L, TO[1] + L, TO[2] + L], M.penrose, P.penK, 'px');
 
   const stations: Station[] = [
     {
       id: 'about',
-      anchor: [1.5, 0.8, 8.2],
-      walk: [[1.5, 0, 7.5], [1.5, 0, 8.2], [2.0, 0, 8.3]],
-      glow: [1.5, 0.8, 7.45],
-      parts: [P.twins],
+      anchor: [0, HL + 0.75, N - 0.75],
+      walk: [[0.05, HL, N - 0.75], [0.85, HL, N - 0.75], [0.85, HL, N - 2.2]],
+      glow: [0.05, HL + 0.75, N - 0.75],
+      parts: [P.twins, P.backL],
     },
     {
       id: 'research',
-      anchor: [1.5, 10.4, 1.5],
-      walk: [[0.5, 10, 2.9], [0.8, 10, 2.6], [0.75, 10, 1.95]],
-      glow: [1.5, 10.1, 1.5],
-      parts: [P.tower, P.ears],
+      anchor: [mid, HP + 0.4, mid],
+      walk: [[mid - 0.9, HP, mid + 0.6], [mid - 0.5, HP, mid + 0.9]],
+      glow: [mid, HP + 0.2, mid],
+      parts: [P.star, P.pillar, ...PENROSE],
     },
     {
       id: 'projects',
-      anchor: [(WX0 + WX1) / 2, HT + 1.0, 2.2],
-      walk: [[WX0 + 0.75, HT, 1.95], [WX0 + 0.75, HT, 2.45], [WX0 + 0.9, HT - 0.38, 2.95]],
-      glow: [WX0 + 0.75, HT + 0.6, 2.02],
-      parts: [P.wing, P.bridge],
+      anchor: [GX0 + 1.15, HL + 1.0, GZ1],
+      walk: [[GX0 + 1.15, HL, GZ1 + 0.05], [GX0 + 1.15, HL, GZ1 + 0.85], [GX0 + 0.4, HL, GZ1 + 0.85]],
+      glow: [GX0 + 1.15, HL + 0.8, GZ1 + 0.05],
+      parts: [P.stairTower, P.backR],
     },
     {
       id: 'activity',
-      anchor: [WX1 + 0.6, 1.0, 0.7],
-      walk: [[WX1 + 0.35, 1.6, 1.15], [WX1 + 0.5, 1.6, 0.75]],
-      glow: [WX1 + 1.25, 0.93, 0.7],
-      parts: [P.crank, P.crankWheel],
+      anchor: wc,
+      walk: [[N - 1.6, 0, N - 1.0], [N - 0.7, 0, N - 1.3]],
+      glow: [wc[0] + 0.1, wc[1], wc[2]],
+      parts: [P.crank, P.crankWheel, P.front],
     },
     {
       id: 'contact',
@@ -279,11 +336,12 @@ export function buildWorld(): World {
 
   return {
     mesh: new Float32Array(m.data),
-    culledFrom: penroseFrom,
+    culledFrom,
     pivots,
     stations,
-    bounds: { min: [-3, -7, -8], max: [14, 16, 13] },
+    bounds: { min: [-8, -8, -6], max: [18, 18, 16] },
     solids: m.solids(),
-    tether: { from: [1.5, 10.05, 1.5], to: joint },
+    tether: { from: [mid, HP + 0.02, mid], to: [mid, H, mid] },
+    spin,
   };
 }

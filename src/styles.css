@@ -350,11 +350,16 @@ button {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 6px 4px;
+  padding: 5px 12px 6px;
+  border-radius: 4px;
+  /* a soft frosted card, so a label reads over the stone it hangs on */
+  background: color-mix(in srgb, var(--bg) 58%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   text-decoration: none;
   white-space: nowrap;
   pointer-events: auto;
-  transition: color 0.3s;
+  transition: color 0.3s, background-color 0.3s;
 }
 .station.left {
   flex-direction: row-reverse;

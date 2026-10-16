@@ -37,10 +37,10 @@ syncMode();
 /** Which way each station's label reaches out from it (wide screens). */
 const LABEL_SIDE: Record<string, { dx: number; dy: number; len?: number }> = {
   about: { dx: -1, dy: 0.12 },
-  research: { dx: 1, dy: -0.2, len: 84 },
-  projects: { dx: 1, dy: -0.45 },
-  activity: { dx: 1, dy: 0.25 },
-  contact: { dx: -1, dy: 0.2 },
+  research: { dx: 1, dy: -0.25, len: 84 },
+  projects: { dx: 1, dy: -0.35 },
+  activity: { dx: 1, dy: 0.3 },
+  contact: { dx: -1, dy: -0.15, len: 96 },
 };
 
 /* ───────────────────────── shell ───────────────────────── */
@@ -166,17 +166,17 @@ function hubBox(w: number, h: number) {
     const r = slot.getBoundingClientRect();
     return { x: r.left + 8, y: r.top + 8, w: r.width - 16, h: r.height - 16 };
   }
-  // Clear of the text on the left, with room for the labels either side.
-  const left = Math.max(hero.getBoundingClientRect().right, w * 0.34) + 150;
-  return { x: left, y: 100, w: w - left - 210, h: h - 170 };
+  // Clear of the text on the left, filling the rest of the screen (the labels hang over its edges).
+  const left = Math.max(hero.getBoundingClientRect().right, w * 0.34) + 60;
+  return { x: left, y: 64, w: w - left - 150, h: h - 84 };
 }
 
 /** Where a section's own building sits, beside its panel. */
 function roomBox(w: number, h: number) {
   if (hubMode() === 'stacked') return { x: 20, y: 62, w: w - 40, h: h * 0.37 - 78 };
   const right = $('.view').getBoundingClientRect().right;
-  const x = right + 70;
-  return { x, y: 110, w: w - x - 70, h: h - 190 };
+  const x = right + 30;
+  return { x, y: 70, w: w - x - 20, h: h - 80 };
 }
 
 const LABEL_GAP = 64;
@@ -197,7 +197,14 @@ function onFrame(anchors: Anchor[]) {
       leaders[k].setAttribute('y2', String(a.y));
       continue;
     }
-    const side = LABEL_SIDE[a.id] ?? { dx: 1, dy: 0 };
+    const pref = LABEL_SIDE[a.id] ?? { dx: 1, dy: 0 };
+    // A label that would run off the screen, or into the text on the left, goes the other way.
+    const width = labels[k].offsetWidth + 24;
+    const room = (dx: number) => {
+      const ex = a.x + Math.sign(dx) * (pref.len ?? LABEL_GAP);
+      return dx > 0 ? ex + width < innerWidth - 12 : ex - width > hero.getBoundingClientRect().right + 16;
+    };
+    const side = room(pref.dx) || !room(-pref.dx) ? pref : { ...pref, dx: -pref.dx };
     const len = Math.hypot(side.dx, side.dy);
     const gap = side.len ?? LABEL_GAP;
     const ex = a.x + (side.dx / len) * gap;
