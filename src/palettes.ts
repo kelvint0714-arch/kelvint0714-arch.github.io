@@ -18,8 +18,9 @@ const flat = (c: string, extra: Partial<Material> = {}) => mat(c, c, c, extra);
 // Materials the great building doesn't use (the buildings behind the doors set their own).
 const EXTRA: Material[] = Array.from({ length: 11 }, () => flat('#888888'));
 // Inlaid lines and banners (after the materials above).
-const DAY_LAST: Material[] = [mat('#bfb4a2', '#9c9080', '#786d60'), mat('#d79a7b', '#c3826a', '#9e6655')];
-const DUSK_LAST: Material[] = [mat('#bcc5c8', '#8b9aa2', '#57666f'), mat('#86d8e2', '#62bccb', '#4697a6')];
+// (then the shade in the backs of niches)
+const DAY_LAST: Material[] = [mat('#bfb4a2', '#9c9080', '#786d60'), mat('#d79a7b', '#c3826a', '#9e6655'), mat('#a89c8a', '#928672', '#706654', { mist: true })];
+const DUSK_LAST: Material[] = [mat('#bcc5c8', '#8b9aa2', '#57666f'), mat('#86d8e2', '#62bccb', '#4697a6'), mat('#93a3a9', '#73848c', '#4e5d64', { mist: true })];
 
 // Order matches M in src/kit.ts.
 export const DAY: Palette = {
@@ -75,6 +76,10 @@ export const DUSK: Palette = {
     ...DUSK_LAST,
   ],
 };
+
+// The great building's domes: terracotta by day, cyan by dusk.
+DAY.mats[M.roof] = mat('#dca07f', '#c78366', '#9f644d');
+DUSK.mats[M.roof] = mat('#8fdbe3', '#68bfcb', '#4a98a5');
 
 const lerp = (a: RGB, b: RGB, t: number): RGB => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
@@ -170,6 +175,7 @@ const ROOMS: Record<string, [Palette, Palette]> = {
         wall: mat('#fbd4e0', '#f0a8c2', '#7f94de'),
         roof: mat('#64c6b5', '#47a497', '#2f7f7b'),
         dome: mat('#64c6b5', '#47a497', '#2f7f7b'),
+        shade: mat('#e9b4c9', '#d98fae', '#6577c4'),
         accent: mat('#a3b1ea', '#8b9ce0', '#6f81cc'),
         hole: mat('#d6c4ef', '#c3aee7', '#a690da'),
         water: mat('#a9e3f0', '#8fd3e6', '#76c2db'),
@@ -195,6 +201,7 @@ const ROOMS: Record<string, [Palette, Palette]> = {
         wall: mat('#e4b9cf', '#a978b2', '#4e5290'),
         roof: mat('#55ab9e', '#3c887f', '#285f5d'),
         dome: mat('#55ab9e', '#3c887f', '#285f5d'),
+        shade: mat('#c99dbf', '#9a6ea8', '#43477f'),
         accent: mat('#8f9ad8', '#7783c9', '#5e69b0'),
         hole: mat('#6d5486', '#5e4879', '#4c3a66'),
         water: mat('#7fc6dc', '#69b4cd', '#559fbb'),
@@ -229,6 +236,7 @@ const ROOMS: Record<string, [Palette, Palette]> = {
         vine: flat('#7aa77a'),
         ink: flat('#4b4360'),
         inlay: flat('#cdbfd9'),
+        shade: mat('#e2cfc2', '#d1b7a8', '#8c7fa3'),
       },
     }),
     world(DUSK, {
@@ -249,6 +257,7 @@ const ROOMS: Record<string, [Palette, Palette]> = {
         vine: flat('#5b8a73'),
         ink: flat('#2a2645'),
         inlay: flat('#8e8ab8'),
+        shade: mat('#b9b6d6', '#8783b3', '#46437a'),
       },
     }),
   ],
@@ -264,6 +273,8 @@ const ROOMS: Record<string, [Palette, Palette]> = {
         stone: mat('#fff6e6', '#f6d37c', '#a8cee4', { mist: true }),
         penrose: mat('#fff6e6', '#f6d37c', '#a8cee4'),
         trim: mat('#fffaf0', '#f8dc93', '#b4d6e9'),
+        roof: mat('#ffb7a3', '#f39a84', '#dd7f6c'),
+        shade: mat('#f4e2c0', '#e9c46a', '#8cb9d4'),
         accent: mat('#c9d4d2', '#8fa4a2', '#6a807f', { mist: true }),
         floor: mat('#fff8ee', '#f8dc93', '#b4d6e9', { tiles: true, mist: true }),
         wall: mat('#fff3df', '#f2cf79', '#9ec6dc', { mist: true }),
@@ -285,6 +296,8 @@ const ROOMS: Record<string, [Palette, Palette]> = {
         stone: mat('#f6e1d8', '#d99ea7', '#7d85b7', { mist: true }),
         penrose: mat('#f6e1d8', '#d99ea7', '#7d85b7'),
         trim: mat('#f8e8e0', '#dba8ae', '#858dbd'),
+        roof: mat('#ffa99a', '#ec8a7e', '#c96a63'),
+        shade: mat('#ead0c8', '#c98d98', '#6c74a6'),
         accent: mat('#9ea6bb', '#6e7895', '#525b78', { mist: true }),
         floor: mat('#f8e6de', '#dba8ae', '#858dbd', { tiles: true, mist: true }),
         wall: mat('#f2dbd2', '#d3979f', '#767fb2', { mist: true }),
@@ -320,6 +333,7 @@ const ROOMS: Record<string, [Palette, Palette]> = {
         lamp: flat('#fff0b8'),
         ink: flat('#1d3b37'),
         inlay: flat('#bfe1d7'),
+        shade: mat('#e3f2ed', '#b9dbd1', '#4f9d90'),
       },
     }),
     world(DUSK, {
@@ -343,6 +357,7 @@ const ROOMS: Record<string, [Palette, Palette]> = {
         lamp: flat('#ffe39a'),
         ink: flat('#0b1d1b'),
         inlay: flat('#6f9d93'),
+        shade: mat('#bcd3cd', '#86aca2', '#2f6d63'),
       },
     }),
   ],
@@ -367,6 +382,8 @@ const ROOMS: Record<string, [Palette, Palette]> = {
         accent: mat('#f0b27a', '#dc955a', '#c07a40'),
         hole: flat('#5b3f8f'),
         dome: mat('#8aa0f5', '#6f86e8', '#5269cc'),
+        roof: mat('#8aa0f5', '#6f86e8', '#5269cc'),
+        shade: mat('#d8c3f0', '#a885d8', '#6d4fb0'),
         wall: mat('#efe3fb', '#c9b0ec', '#9a7fd2'),
       },
     }),
@@ -389,6 +406,8 @@ const ROOMS: Record<string, [Palette, Palette]> = {
         accent: mat('#e89f62', '#d08545', '#b06a30'),
         hole: flat('#2c1c4d'),
         dome: mat('#6b82e8', '#566cd6', '#3f53b3'),
+        roof: mat('#6b82e8', '#566cd6', '#3f53b3'),
+        shade: mat('#a985cf', '#7c55b8', '#47307f'),
         wall: mat('#c8a7e4', '#9d78d2', '#6c4fa8'),
       },
     }),

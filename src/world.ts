@@ -7,7 +7,7 @@
 // side landings stand the twin domed towers (About) and the gate tower (Projects); the crank is on
 // the front block (Activity); a pavilion floats below (Contact). A white traveller walks between them.
 
-import { Mesh, rect, type Solid, type V3 } from './geometry';
+import { Mesh, archShape, rect, type Solid, type V3 } from './geometry';
 import { islet, kit, M, seen } from './kit';
 
 export { M };
@@ -86,18 +86,35 @@ export function buildWorld(): World {
   // The pillar's crown is seen exactly where the loop's far corner (W/2, HL, W/2) is.
   const HP = (N - W) / 2 + HL;
 
+  // Every outer wall stands on the same base, so the whole reads as one building: a plinth, a blind
+  // arcade of tall pointed niches, and a string course over it. `niches`: how many, or where; `wrap`
+  // carries each band round the corner past u1.
+  const BASE = { plinth: -6.4, arcade: -5.6, course: -0.75, spring: -2.3 };
+  const base = (face: 'x' | 'z', at: number, u0: number, u1: number, part: number, niches: number | [number, number, number][], wrap = false) => {
+    const list: [number, number, number][] = typeof niches === 'number'
+      ? Array.from({ length: niches }, (_, i) => {
+          const w = (u1 - u0) / niches;
+          return [u0 + i * w + w * 0.3, u0 + (i + 1) * w - w * 0.3, BASE.spring] as [number, number, number];
+        })
+      : niches;
+    const band = (y0: number, y1: number, d: number, ns: [number, number, number][], mat: number) =>
+      k.relief(face, at, u0, u1 + (wrap ? d : 0), y0, y1, d, ns, mat, part);
+    band(BASE.plinth, BASE.arcade, 0.24, [], M.stone);
+    band(BASE.arcade, BASE.course, 0.16, list, M.stone);
+    band(BASE.course, BASE.course + 0.14, 0.22, [], M.trim);
+  };
+
   /* ── the front block, the loop's low point ── */
   {
     const x0 = N - F, z0 = N - F;
     m.box([x0, -D, z0], [N, 0, N], M.stone, P.front);
     m.box([x0, -0.06, z0], [N, 0, N], M.floor, P.front);
-    k.band(x0, z0, N, N, -0.55, 0.1, P.front);
-    k.band(x0, z0, N, N, -4.2, 0.1, P.front);
     k.friezeZ(x0, N, -0.4, N, P.front);
     k.friezeX(z0, N, -0.4, N, P.front);
-    k.doorZ(x0 + 0.85, -3.3, N, 0.9, 1.6, M.hole, P.front);
-    k.windowZ(x0 + 1.0, -7.0, N, 0.5, 1.0, P.front);
-    k.windowX(N, -7.0, N - 1.05, 0.5, 1.0, P.front);
+    // a gateway in front; on its right face two narrow niches either side of the crank
+    base('z', N, x0, N, P.front, [[x0 + 0.72, N - 0.68, -2.5]], true);
+    m.decal([x0 + 0.92, BASE.arcade, N + 0.004], [1, 0, 0], [0, 1, 0], archShape(0, 0, 0.8, 2.3), M.hole, P.front);
+    base('x', N, z0, N, P.front, [[z0 + 0.25, z0 + 0.62, BASE.spring], [N - 0.62, N - 0.25, BASE.spring]]);
     // a star inlaid on its top, where the two stairs begin
     m.decal([x0 + F / 2, 0.004, z0 + F / 2], [1, 0, 0], [0, 0, -1], k.star(0, 0, 8, 0.85, 0.55, Math.PI / 8).map(([a, b]) => [a, -b] as [number, number]), M.inlay, P.front);
     pivots[P.front] = [x0 + F / 2, 0, z0 + F / 2];
@@ -111,16 +128,14 @@ export function buildWorld(): World {
       const xa = W + i * run;
       m.box([xa, -D, N - W], [xa + run, HL - (i + 1) * rise, N], M.stone, P.stairL);
     }
-    k.inlayZ(W, -1.2, N, N - F - W, 0.06, P.stairL);
-    for (let x = W + 0.5; x < N - F - 0.6; x += 1.15) k.slitZ(x, -2.6, N, 0.18, 0.5, P.stairL);
+    base('z', N, W, N - F, P.stairL, 4);
     pivots[P.stairL] = [N - F, 0, N - W / 2];
     // right: along the right edge (x near N), climbing towards −z
     for (let i = 0; i < steps; i++) {
       const za = W + i * run;
       m.box([N - W, -D, za], [N, HL - (i + 1) * rise, za + run], M.stone, P.stairR);
     }
-    k.inlayX(N, -1.2, N - F, N - F - W, 0.06, P.stairR);
-    for (let z = N - F - 0.5; z > W + 0.6; z -= 1.15) k.slitX(N, -2.6, z, 0.18, 0.5, P.stairR);
+    base('x', N, W, N - F, P.stairR, 4);
     pivots[P.stairR] = [N - W / 2, 0, N - F];
   }
 
@@ -149,6 +164,7 @@ export function buildWorld(): World {
     m.box([0, HL - 0.04, 0], [W, HL, N], M.floor, P.backL);
     k.band(0, N - W, W, N, HL - 0.55, 0.1, P.backL);
     k.windowZ(0.62, HL - 2.4, N, 0.46, 0.95, P.backL);
+    base('z', N, 0, W, P.backL, 1);
     m.decal([W / 2, HL + 0.004, N - W / 2], [1, 0, 0], [0, 0, -1], k.star(0, 0, 4, 0.55, 0.3, Math.PI / 4).map(([a, b]) => [a, -b] as [number, number]), M.inlay, P.backL);
     pivots[P.backL] = [W / 2, HL, N];
     // right landing and back-right walk (z from 0 to W, x from N down to 0), with the far corner
@@ -159,6 +175,7 @@ export function buildWorld(): World {
     m.box([0, HL - 0.04, 0], [N, HL, W], M.floor, P.backR);
     k.band(N - W, 0, N, W, HL - 0.55, 0.1, P.backR);
     k.windowX(N, HL - 2.4, W - 0.62, 0.46, 0.95, P.backR);
+    base('x', N, 0, W, P.backR, 1);
     m.decal([N - W / 2, HL + 0.004, W / 2], [1, 0, 0], [0, 0, -1], k.star(0, 0, 4, 0.55, 0.3, Math.PI / 4).map(([a, b]) => [a, -b] as [number, number]), M.inlay, P.backR);
     pivots[P.backR] = [N, HL, W / 2];
   }
@@ -181,32 +198,36 @@ export function buildWorld(): World {
   }
 
   /* ── the twin towers, beside the left landing (About at their door) ── */
+  // One tall block with two domes on drums: pilasters up its corners, two tiers of niches, a pointed
+  // portal round the door, pointed merlons round its roof, pinnacles at its corners.
   {
     const x0 = -3.0, x1 = 0, z0 = N - 2.3, z1 = N;
     const top = HL + 6.2;
     m.box([x0, -D, z0], [x1, top, z1], M.stone, P.twins);
+    base('z', z1, x0, x1, P.twins, 2);
     k.band(x0, z0, x1, z1, HL - 0.1, 0.12, P.twins);
-    k.band(x0, z0, x1, z1, HL + 3.3, 0.1, P.twins);
-    k.band(x0, z0, x1, z1, -1.2, 0.1, P.twins);
+    for (const u of [x0, x1 - 0.3]) k.pilaster('z', z1, u, 0.3, BASE.course + 0.14, top - 0.45, 0.09, P.twins);
+    k.pilaster('x', x1, z0, 0.3, HL + 0.02, top - 0.45, 0.09, P.twins);
+    // tall paired windows in pointed niches, a course, then small round ones either side of the banner
+    const pair: [number, number, number][] = [[x0 + 0.62, x0 + 1.22, HL + 2.0], [x1 - 1.22, x1 - 0.62, HL + 2.0]];
+    k.relief('z', z1, x0 + 0.3, x1 - 0.3, HL + 0.45, HL + 3.3, 0.11, pair, M.stone, P.twins);
+    for (const [a, b] of pair) m.decal([a + 0.14, HL + 0.85, z1 + 0.004], [1, 0, 0], [0, 1, 0], archShape(0, 0, b - a - 0.28, 1.25), M.hole, P.twins);
+    k.relief('z', z1, x0 + 0.25, x1 - 0.25, HL + 3.3, HL + 3.45, 0.16, [], M.trim, P.twins);
+    k.relief('z', z1, x0 + 0.3, x1 - 0.3, HL + 3.45, HL + 5.5, 0.1, [[x0 + 0.55, x0 + 1.0, HL + 4.5], [x1 - 1.0, x1 - 0.55, HL + 4.5]], M.stone, P.twins, false);
+    k.bannerZ(x0 + 1.25, top - 0.12, z1, 0.5, 2.2, P.twins);
+    // the door: a pointed portal, the door set in it
+    k.relief('x', x1, z0 + 0.3, z1 - 0.3, HL, HL + 2.6, 0.18, [[N - 1.2, N - 0.3, HL + 1.05]], M.stone, P.twins);
+    m.decal([x1 + 0.004, HL, N - 0.38], [0, 0, -1], [0, 1, 0], archShape(0, 0, 0.74, 1.6), M.wood, P.twins);
+    k.relief('x', x1, z0 + 0.3, z1 - 0.3, HL + 3.3, HL + 5.5, 0.1, [[z0 + 0.55, z0 + 1.05, HL + 4.4], [z1 - 1.05, z1 - 0.55, HL + 4.4]], M.stone, P.twins, false);
     const capTop = k.cornice(x0, z0, x1, z1, top, P.twins);
     k.friezeZ(x0, x1, top - 0.4, z1, P.twins);
     k.friezeX(z0, z1, top - 0.4, x1, P.twins);
-    k.doorX(x1, HL, z0 + 1.55, 0.8, 1.45, M.wood, P.twins);
-    m.decal([x1 + 0.004, HL + 0.05, z0 + 1.17], [0, 0, -1], [0, 1, 0], rect(0, 0, 0.04, 1.1), M.hole, P.twins);
-    for (const u of [x0 + 0.45, x0 + 2.15]) {
-      for (const y of [HL + 1.2, HL + 4.1, 0.2, -3.4]) k.windowZ(u, y, z1, 0.4, 0.85, P.twins);
-    }
-    k.windowX(x1, HL + 4.1, z0 + 1.3, 0.4, 0.85, P.twins);
-    k.bannerZ(x0 + 1.25, top - 0.12, z1, 0.5, 2.2, P.twins);
-    for (const [a, b] of [[x0 + 0.1, x0 + 1.4], [x1 - 1.4, x1 - 0.1]] as [number, number][]) {
-      const c: V3 = [(a + b) / 2, capTop, (z0 + z1) / 2];
-      m.box([a, capTop, z0 + 0.12], [b, capTop + 1.1, z1 - 0.12], M.stone, P.twins);
-      k.cornice(a, z0 + 0.12, b, z1 - 0.12, capTop + 1.1, P.twins, 0.08);
-      k.doorZ(c[0] - 0.17, capTop + 0.2, z1 - 0.12, 0.34, 0.65, M.hole, P.twins);
-      k.doorX(b, capTop + 0.2, c[2] + 0.17, 0.34, 0.65, M.hole, P.twins);
-      k.dome([c[0], capTop + 1.4, c[2]], 0.62, 1.15, P.twins);
-      k.finial([c[0], capTop + 2.75, c[2]], 0.5, P.twins);
-    }
+    k.merlons('x', x0 + 0.3, x1 - 0.3, capTop, z1 - 0.2, 0.2, 0.24, M.stone, P.twins);
+    k.merlons('x', x0 + 0.3, x1 - 0.3, capTop, z0, 0.2, 0.24, M.stone, P.twins);
+    k.merlons('z', z0 + 0.3, z1 - 0.3, capTop, x1 - 0.2, 0.2, 0.24, M.stone, P.twins);
+    k.merlons('z', z0 + 0.3, z1 - 0.3, capTop, x0, 0.2, 0.24, M.stone, P.twins);
+    for (const [x, z] of [[x0 + 0.12, z0 + 0.12], [x1 - 0.12, z0 + 0.12], [x1 - 0.12, z1 - 0.12], [x0 + 0.12, z1 - 0.12]]) k.pinnacle([x, capTop, z], 0.24, P.twins);
+    for (const x of [x0 + 0.78, x1 - 0.78]) k.drumDome([x, capTop, (z0 + z1) / 2], 0.52, 0.85, P.twins);
     pivots[P.twins] = [(x0 + x1) / 2, 0, (z0 + z1) / 2];
   }
 
@@ -215,19 +236,31 @@ export function buildWorld(): World {
   {
     const top = HL + 7.4;
     m.box([GX0, -D, GZ0], [GX1, top, GZ1], M.stone, P.stairTower);
+    base('x', GX1, GZ0, GZ1, P.stairTower, 2);
     k.band(GX0, GZ0, GX1, GZ1, HL - 0.1, 0.12, P.stairTower);
-    k.band(GX0, GZ0, GX1, GZ1, HL + 3.6, 0.1, P.stairTower);
-    k.band(GX0, GZ0, GX1, GZ1, -1.2, 0.1, P.stairTower);
+    for (const u of [GZ0, GZ1 - 0.3]) k.pilaster('x', GX1, u, 0.3, BASE.course + 0.14, top - 0.45, 0.09, P.stairTower);
+    k.pilaster('z', GZ1, GX0, 0.3, HL + 0.02, top - 0.45, 0.09, P.stairTower);
+    // the door (Projects): a pointed portal
+    k.relief('z', GZ1, GX0 + 0.3, GX1 - 0.3, HL, HL + 2.7, 0.18, [[GX0 + 0.68, GX0 + 1.62, HL + 1.1]], M.stone, P.stairTower);
+    m.decal([GX0 + 0.78, HL, GZ1 + 0.004], [1, 0, 0], [0, 1, 0], archShape(0, 0, 0.74, 1.65), M.hole, P.stairTower);
+    // high up, tall paired windows in niches on the right, one beside the banner in front
+    const pair: [number, number, number][] = [[GZ0 + 0.62, GZ0 + 1.22, HL + 5.0], [GZ1 - 1.22, GZ1 - 0.62, HL + 5.0]];
+    k.relief('x', GX1, GZ0 + 0.3, GZ1 - 0.3, HL + 3.5, HL + 6.5, 0.11, pair, M.stone, P.stairTower);
+    for (const [a, b] of pair) m.decal([GX1 + 0.004, HL + 3.85, b - 0.14], [0, 0, -1], [0, 1, 0], archShape(0, 0, b - a - 0.28, 1.25), M.hole, P.stairTower);
+    k.relief('z', GZ1, GX0 + 1.0, GX1 - 0.3, HL + 3.5, HL + 6.5, 0.11, [[GX0 + 1.3, GX0 + 1.9, HL + 5.0]], M.stone, P.stairTower);
+    m.decal([GX0 + 1.44, HL + 3.85, GZ1 + 0.004], [1, 0, 0], [0, 1, 0], archShape(0, 0, 0.32, 1.25), M.hole, P.stairTower);
     const capTop = k.cornice(GX0, GZ0, GX1, GZ1, top, P.stairTower);
-    k.crenels(GX0 - 0.12, GZ0 - 0.12, GX1 + 0.12, GZ1 + 0.12, capTop, P.stairTower, 0.27);
     k.friezeZ(GX0, GX1, top - 0.45, GZ1, P.stairTower);
     k.friezeX(GZ0, GZ1, top - 0.45, GX1, P.stairTower);
-    k.doorZ(GX0 + 0.7, HL, GZ1, 0.9, 1.6, M.hole, P.stairTower);
-    for (const y of [HL + 4.3, HL + 6.3, 0.2, -3.4]) k.windowX(GX1, y, GZ1 - 0.75, 0.44, 0.9, P.stairTower);
-    k.windowZ(GX0 + 0.93, HL + 4.3, GZ1, 0.44, 0.9, P.stairTower);
-    k.bannerZ(GX0 + 0.5, top - 0.12, GZ1, 0.42, 1.8, P.stairTower);
-    k.lantern([GX1 - 0.3, HL + 2.2, GZ1 + 0.2], 0.3, P.stairTower);
-    m.box([GX1 - 0.35, HL + 2.18, GZ1], [GX1 - 0.25, HL + 2.24, GZ1 + 0.24], M.ink, P.stairTower);
+    k.merlons('x', GX0 + 0.3, GX1 - 0.3, capTop, GZ1 - 0.2, 0.2, 0.26, M.stone, P.stairTower);
+    k.merlons('x', GX0 + 0.3, GX1 - 0.3, capTop, GZ0, 0.2, 0.26, M.stone, P.stairTower);
+    k.merlons('z', GZ0 + 0.3, GZ1 - 0.3, capTop, GX1 - 0.2, 0.2, 0.26, M.stone, P.stairTower);
+    k.merlons('z', GZ0 + 0.3, GZ1 - 0.3, capTop, GX0, 0.2, 0.26, M.stone, P.stairTower);
+    for (const [x, z] of [[GX0 + 0.12, GZ0 + 0.12], [GX1 - 0.12, GZ0 + 0.12], [GX1 - 0.12, GZ1 - 0.12], [GX0 + 0.12, GZ1 - 0.12]]) k.pinnacle([x, capTop, z], 0.26, P.stairTower);
+    k.drumDome([(GX0 + GX1) / 2, capTop, (GZ0 + GZ1) / 2], 0.62, 1.1, P.stairTower);
+    k.bannerZ(GX0 + 0.42, top - 0.12, GZ1, 0.4, 1.8, P.stairTower);
+    k.lantern([GX1 - 0.15, HL + 2.4, GZ1 + 0.5], 0.3, P.stairTower);
+    m.box([GX1 - 0.2, HL + 2.38, GZ1 + 0.18], [GX1 - 0.1, HL + 2.44, GZ1 + 0.55], M.ink, P.stairTower);
     pivots[P.stairTower] = [(GX0 + GX1) / 2, 0, (GZ0 + GZ1) / 2];
   }
 
@@ -248,8 +281,7 @@ export function buildWorld(): World {
   k.friezeX(PC[2] - 1.3, PC[2] + 1.3, PC[1] - 0.28, PC[0] + 1.3, P.pavilion);
   for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
     const x = PC[0] + dx * 1.0, z = PC[2] + dz * 1.0;
-    m.box([x - 0.15, PC[1] + 0.08, z - 0.15], [x + 0.15, PC[1] + 2.1, z + 0.15], M.stone, P.pavilion);
-    m.box([x - 0.2, PC[1] + 0.08, z - 0.2], [x + 0.2, PC[1] + 0.3, z + 0.2], M.trim, P.pavilion);
+    m.lathe([x, PC[1] + 0.08, z], [[0.0001, 0], [0.2, 0], [0.2, 0.16], [0.14, 0.24], [0.12, 1.86], [0.17, 1.94], [0.17, 2.02], [0.0001, 2.02]], 10, M.stone, P.pavilion);
   }
   // its arched heads between the columns, on the two faces seen
   for (const [o, axis] of [[PC[2] + 1.15, 'z'], [PC[0] + 1.15, 'x']] as [number, 'x' | 'z'][]) {
@@ -263,8 +295,8 @@ export function buildWorld(): World {
     else m.extrude(shape.map(([u, v]) => [PC[2] - u, PC[1] + v] as [number, number]), 'zy', o - 0.15, o, M.stone, P.pavilion, true);
   }
   k.cornice(PC[0] - 1.25, PC[2] - 1.25, PC[0] + 1.25, PC[2] + 1.25, PC[1] + 2.1, P.pavilion, 0.12);
-  m.lathe([PC[0], PC[1] + 2.4, PC[2]], [[1.05, 0], [0.95, 0.35], [0.55, 1.0], [0.0001, 1.75]], 4, M.dome, P.pavilion, Math.PI / 4);
-  k.finial([PC[0], PC[1] + 4.12, PC[2]], 0.45, P.pavilion);
+  k.drumDome([PC[0], PC[1] + 2.4, PC[2]], 0.62, 0.45, P.pavilion);
+  for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.pinnacle([PC[0] + dx * 1.12, PC[1] + 2.4, PC[2] + dz * 1.12], 0.17, P.pavilion);
   m.box([PC[0] - 0.02, PC[1] + 1.45, PC[2] - 0.02], [PC[0] + 0.02, PC[1] + 2.1, PC[2] + 0.02], M.ink, P.pavilion);
   m.lathe([PC[0], PC[1] + 1.05, PC[2]], [[0.0001, 0], [0.16, 0.12], [0.16, 0.3], [0.0001, 0.42]], 6, M.glow, P.pavilion);
   k.keel([PC[0], PC[1] - 0.35, PC[2]], 0.9, 1.2, P.pavilion);

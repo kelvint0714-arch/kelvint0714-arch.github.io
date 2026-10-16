@@ -32,6 +32,7 @@ export const M = {
   crow: 23,
   inlay: 24,
   banner: 25,
+  shade: 26,
 } as const;
 
 export function kit(m: Mesh) {
@@ -332,12 +333,92 @@ export function kit(m: Mesh) {
       tipped([c[0] + rc * Math.cos(a), c[1] + (i + 1) * rise - thick / 2, c[2] + rc * Math.sin(a)], [r1 - r0, thick, len], 0, 0, -a, mat, part);
     }
   };
+  /* ── architecture in relief ── */
+  // An arch's curve between a and b, springing at `spring`: round, or pointed (two arcs meeting at
+  // a point, after the Moorish ones). From a round to b, endpoints left out.
+  const archCurve = (a: number, b: number, spring: number, pointed: boolean, n = 12): [number, number][] => {
+    const w = b - a, pts: [number, number][] = [];
+    if (!pointed) {
+      for (let j = 1; j < n; j++) {
+        const ang = Math.PI - (j / n) * Math.PI;
+        pts.push([a + w / 2 + (w / 2) * Math.cos(ang), spring + (w / 2) * Math.sin(ang)]);
+      }
+      return pts;
+    }
+    const R = 0.8 * w, top = Math.acos((w / 2 - R) / R);
+    for (let j = 1; j <= n / 2; j++) {
+      const ang = Math.PI - (j / (n / 2)) * (Math.PI - top);
+      pts.push([a + R + R * Math.cos(ang), spring + R * Math.sin(ang)]);
+    }
+    for (let j = n / 2 - 1; j >= 1; j--) {
+      const ang = Math.PI - (j / (n / 2)) * (Math.PI - top);
+      pts.push([b - R - R * Math.cos(ang), spring + R * Math.sin(ang)]);
+    }
+    return pts;
+  };
+  // A band of relief `depth` proud of a +z face (at z = at; u is x) or a +x face (x = at; u is z),
+  // from y0 up to y1 along u0…u1, with arched niches cut up into it from y0: [a, b, spring]. Their
+  // backs (the wall, set back) are laid in shade.
+  const relief = (face: 'x' | 'z', at: number, u0: number, u1: number, y0: number, y1: number, depth: number, niches: [number, number, number][] = [], mat: number = M.stone, part = 0, pointed = true) => {
+    const pts: [number, number][] = [[u0, y0]];
+    for (const [a, b, spring] of niches) {
+      const curve = archCurve(a, b, spring, pointed);
+      pts.push([a, y0], [a, spring], ...curve, [b, spring], [b, y0]);
+      const back: [number, number][] = [[a, y0], [b, y0], [b, spring], ...[...curve].reverse(), [a, spring]];
+      if (face === 'z') m.decal([0, 0, at], [1, 0, 0], [0, 1, 0], back, M.shade, part);
+      else m.decal([at, 0, 0], [0, 0, -1], [0, 1, 0], back.map(([u, v]) => [-u, v] as [number, number]), M.shade, part);
+    }
+    pts.push([u1, y0], [u1, y1], [u0, y1]);
+    m.extrude(pts, face === 'z' ? 'xy' : 'zy', at, at + depth, mat, part, true);
+  };
+  // A row of pointed merlons along x (or z) from a to b, standing on y, the row `w` deep from `at`.
+  const merlons = (axis: 'x' | 'z', a: number, b: number, y: number, at: number, w: number, s = 0.3, mat: number = M.stone, part = 0) => {
+    const n = Math.max(1, Math.floor((b - a + s * 0.8) / (s * 1.8)));
+    const gap = (b - a - n * s) / Math.max(1, n - 1);
+    for (let i = 0; i < n; i++) {
+      const u = n === 1 ? (a + b - s) / 2 : a + i * (s + gap);
+      const [x0, z0, x1, z1] = axis === 'x' ? [u, at, u + s, at + w] : [at, u, at + w, u + s];
+      m.box([x0, y, z0], [x1, y + s * 0.85, z1], mat, part);
+      m.lathe([(x0 + x1) / 2, y + s * 0.85, (z0 + z1) / 2], [[0.0001, 0], [Math.hypot(x1 - x0, z1 - z0) / 2, 0], [0.0001, s * 0.75]], 4, mat, part, Math.PI / 4);
+    }
+  };
+  // A slender pinnacle: a little square shaft and its pyramid.
+  const pinnacle = (c: V3, s: number, part = 0, mat: number = M.trim) => {
+    m.box([c[0] - s / 2, c[1], c[2] - s / 2], [c[0] + s / 2, c[1] + s * 1.8, c[2] + s / 2], mat, part);
+    m.box([c[0] - s * 0.62, c[1] + s * 1.8, c[2] - s * 0.62], [c[0] + s * 0.62, c[1] + s * 2.0, c[2] + s * 0.62], mat, part);
+    m.lathe([c[0], c[1] + s * 2.0, c[2]], [[0.0001, 0], [s * 0.82, 0], [0.0001, s * 2.6]], 4, mat, part, Math.PI / 4);
+  };
+  // A chhatri: a little domed kiosk on four slender columns (for corners and roofs).
+  const chhatri = (c: V3, w: number, h: number, part = 0, domeMat: number = M.roof, colMat: number = M.trim) => {
+    m.box([c[0] - w / 2, c[1], c[2] - w / 2], [c[0] + w / 2, c[1] + 0.1, c[2] + w / 2], colMat, part);
+    const q = w / 2 - 0.09, t = Math.max(0.035, w * 0.06);
+    for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) m.box([c[0] + dx * q - t, c[1] + 0.1, c[2] + dz * q - t], [c[0] + dx * q + t, c[1] + h, c[2] + dz * q + t], colMat, part);
+    m.box([c[0] - w / 2 - 0.06, c[1] + h, c[2] - w / 2 - 0.06], [c[0] + w / 2 + 0.06, c[1] + h + 0.1, c[2] + w / 2 + 0.06], colMat, part);
+    dome([c[0], c[1] + h + 0.1, c[2]], w * 0.44, w * 0.8, part, domeMat);
+    finial([c[0], c[1] + h + 0.1 + w * 0.8, c[2]], w * 0.45, part, domeMat);
+  };
+  // A dome on an eight-sided drum, arched windows round the drum.
+  const drumDome = (c: V3, r: number, h: number, part = 0, domeMat: number = M.roof, wallMat: number = M.stone) => {
+    m.lathe(c, [[0.0001, 0], [r, 0], [r, h], [0.0001, h]], 8, wallMat, part, -Math.PI / 8);
+    for (const i of [7, 0, 1, 2, 3]) {
+      const a = (i / 8) * Math.PI * 2, R = r * Math.cos(Math.PI / 8) + 0.004;
+      m.decal([c[0] + R * Math.cos(a), c[1] + h * 0.22, c[2] + R * Math.sin(a)], [Math.sin(a), 0, -Math.cos(a)], [0, 1, 0], archShape(-r * 0.2, 0, r * 0.4, h * 0.6), M.hole, part);
+    }
+    m.lathe([c[0], c[1] + h, c[2]], [[r + 0.08, 0], [r + 0.08, 0.14], [0.0001, 0.14]], 8, M.trim, part, -Math.PI / 8);
+    dome([c[0], c[1] + h + 0.14, c[2]], r * 1.02, r * 1.9, part, domeMat);
+    finial([c[0], c[1] + h + 0.14 + r * 1.9, c[2]], r * 0.7, part, domeMat);
+  };
+  // A pilaster: a flat strip standing a little proud up a +z or +x face.
+  const pilaster = (face: 'x' | 'z', at: number, u: number, w: number, y0: number, y1: number, d = 0.07, part = 0, mat: number = M.trim) => {
+    if (face === 'z') m.box([u, y0, at], [u + w, y1, at + d], mat, part);
+    else m.box([at, y0, u], [at + d, y1, u + w], mat, part);
+  };
   const star = (cx: number, cz: number, n: number, r0: number, r1: number, turn = 0): [number, number][] =>
     Array.from({ length: n * 2 }, (_, i) => {
       const a = turn + (i / (n * 2)) * Math.PI * 2, r = i % 2 ? r1 : r0;
       return [cx + r * Math.cos(a), cz + r * Math.sin(a)] as [number, number];
     });
-  return { doorZ, doorX, slitZ, slitX, friezeZ, friezeX, crenels, dome, keel, island, wheel, runeRing, torus, tipped, rock, pagoda, onionZ, frame, vines, band, cornice, windowZ, windowX, inlayZ, inlayX, finial, lantern, parapet, bannerZ, slab, star, round, onFace, archAt, cone, cupola, ring, rotunda, bridge, spiral };
+  return { doorZ, doorX, slitZ, slitX, friezeZ, friezeX, crenels, dome, keel, island, wheel, runeRing, torus, tipped, rock, pagoda, onionZ, frame, vines, band, cornice, windowZ, windowX, inlayZ, inlayX, finial, lantern, parapet, bannerZ, slab, star, round, onFace, archAt, cone, cupola, ring, rotunda, bridge, spiral, archCurve, relief, merlons, pinnacle, chhatri, drumDome, pilaster };
 }
 
 function faceN(a: V3, b: V3, c: V3): V3 {
