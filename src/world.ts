@@ -4,7 +4,7 @@
 // below (Contact) — with a white traveller who walks between them, and an impossible triangle
 // hanging in the sky.
 
-import { Mesh, rect, type V3 } from './geometry';
+import { Mesh, rect, type Solid, type V3 } from './geometry';
 import { kit, M } from './kit';
 
 export { M };
@@ -24,8 +24,13 @@ export const P = {
   penrose: 10,
   ears: 11,
   hanging: 12,
+  penB: 13,
+  penC: 14,
+  penK: 15,
 } as const;
-export const PART_COUNT = 13;
+export const PART_COUNT = 16;
+/** The impossible triangle's parts: its three beams, and the corner that closes it. */
+export const PENROSE: number[] = [P.penrose, P.penB, P.penC, P.penK];
 
 export interface Station {
   id: string;
@@ -47,6 +52,10 @@ export interface World {
   pivots: V3[];
   stations: Station[];
   bounds: { min: V3; max: V3 };
+  solids: Solid[];
+  /** The impossible triangle: the joint over the tall tower that its light rises to, and the rune
+   * the light rises from. */
+  tether: { from: V3; to: V3 };
 }
 
 export function buildWorld(): World {
@@ -180,10 +189,10 @@ export function buildWorld(): World {
   wheelOn(wc, 'x', 0.54, 4, M.glow, P.crankWheel);
   pivots[P.crankWheel] = wc;
 
-  /* ── the bridge that swings into place between the loop and the stair head ── */
+  /* ── the bridge that turns into place between the loop and the stair head ── */
   m.box([7.2, Y - 0.35, 0.35], [WX0, Y, 1.65], M.stone, P.bridge);
   m.box([7.2, Y, 0.35], [WX0, Y + 0.12, 1.65], M.floor, P.bridge);
-  pivots[P.bridge] = [7.2, Y, 1.0];
+  pivots[P.bridge] = [(7.2 + WX0) / 2, Y, 1.0];
 
   /* ── a small hanging piece on the left ── */
   m.box([-2.6, 2.2, 9.0], [-1.0, 4.4, 10.6], M.stone, P.hanging);
@@ -213,22 +222,22 @@ export function buildWorld(): World {
   pivots[P.pavilion] = PC;
 
   /* ── the impossible triangle ── */
-  // Three beams along x, then y, then z: the way back to the start is (L, L, L), straight down the
-  // line of sight, so on screen the triangle closes. Its last corner, nearest the eye, leaves its
-  // right face open (drawn with back faces culled), so the first beam shows through it and seems
-  // to run on into the corner.
-  const TO: V3 = [5.2, 12.6, -7.6];
-  const L = 3.6, t = 0.64;
-  const pen = new Mesh();
-  pen.box([TO[0], TO[1], TO[2]], [TO[0] + L, TO[1] + t, TO[2] + t], M.penrose, P.penrose);
-  pen.box([TO[0] + L - t, TO[1] + t, TO[2]], [TO[0] + L, TO[1] + L, TO[2] + t], M.penrose, P.penrose, 'ny');
-  pen.box([TO[0] + L - t, TO[1] + L - t, TO[2] + t], [TO[0] + L, TO[1] + L, TO[2] + L - t], M.penrose, P.penrose, 'nz');
-  pen.box([TO[0] + L - t, TO[1] + L - t, TO[2] + L - t], [TO[0] + L, TO[1] + L, TO[2] + L], M.penrose, P.penrose, 'px');
-  pivots[P.penrose] = [TO[0] + L / 2, TO[1] + L / 2, TO[2] + L / 2];
-
-  // The triangle last: it is drawn with back faces culled (its trick needs a face left open).
+  // Hung over the building's crown, its lowest joint above the tall tower's rune, light rising
+  // between them. Three beams along x, then y, then z: the way back to the start is (L, L, L),
+  // straight down the line of sight, so on screen the triangle closes. The corner that closes it,
+  // nearest the eye, leaves its right face open (drawn with back faces culled, last in the mesh),
+  // so the first beam shows through it and seems to run on into the corner. It is set far back
+  // along the line of sight, so it never hides the building.
+  const TO: V3 = [-13.5, 3.9, -8.4];
+  const L = 6.2, t = 1.05;
+  m.box([TO[0], TO[1], TO[2]], [TO[0] + L, TO[1] + t, TO[2] + t], M.penrose, P.penrose);
+  m.box([TO[0] + L - t, TO[1] + t, TO[2]], [TO[0] + L, TO[1] + L, TO[2] + t], M.penrose, P.penB);
+  m.box([TO[0] + L - t, TO[1] + L - t, TO[2] + t], [TO[0] + L, TO[1] + L, TO[2] + L - t], M.penrose, P.penC);
+  const centre: V3 = [TO[0] + L / 2, TO[1] + L / 2, TO[2] + L / 2];
+  for (const part of [P.penrose, P.penB, P.penC, P.penK]) pivots[part] = centre;
   const penroseFrom = m.count;
-  m.data.push(...pen.data);
+  m.box([TO[0] + L - t, TO[1] + L - t, TO[2] + L - t], [TO[0] + L, TO[1] + L, TO[2] + L], M.penrose, P.penK, 'px');
+  const joint: V3 = [TO[0] + L - t / 2, TO[1] + t / 2, TO[2] + t / 2];
 
   const stations: Station[] = [
     {
@@ -274,5 +283,7 @@ export function buildWorld(): World {
     pivots,
     stations,
     bounds: { min: [-3, -7, -8], max: [14, 16, 13] },
+    solids: m.solids(),
+    tether: { from: [1.5, 10.05, 1.5], to: joint },
   };
 }

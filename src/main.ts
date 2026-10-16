@@ -37,7 +37,7 @@ syncMode();
 /** Which way each station's label reaches out from it (wide screens). */
 const LABEL_SIDE: Record<string, { dx: number; dy: number; len?: number }> = {
   about: { dx: -1, dy: 0.12 },
-  research: { dx: -0.55, dy: -1, len: 74 },
+  research: { dx: 1, dy: -0.2, len: 84 },
   projects: { dx: 1, dy: -0.45 },
   activity: { dx: 1, dy: 0.25 },
   contact: { dx: -1, dy: 0.2 },

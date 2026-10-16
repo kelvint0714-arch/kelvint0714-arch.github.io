@@ -8,7 +8,7 @@
 //   Activity  — the Endless Stair: a stair round a dark tower that climbs for ever, on rocks in a pond
 //   Contact   — the Violet Tree: a door pouring light up a curved ramp, a tree of pink cubes
 
-import { Mesh, archShape, rect, type V3 } from './geometry';
+import { Mesh, archShape, rect, type Solid, type V3 } from './geometry';
 import { kit, M } from './kit';
 import type { Beam, Palette, Puff, RGB } from './renderer';
 
@@ -31,6 +31,7 @@ export interface Pose {
 export interface Room {
   id: string;
   mesh: Float32Array;
+  solids: Solid[];
   /** Vertices from here on are drawn with back faces culled (an impossible corner's trick). */
   culledFrom?: number;
   pivots: V3[];
@@ -170,6 +171,7 @@ function lotusPalace(): Room {
   return {
     id: 'about',
     mesh: new Float32Array(m.data),
+    solids: m.solids(),
     pivots,
     parts: 9,
     assembly: [
@@ -290,6 +292,7 @@ function nightWindow(): Room {
   return {
     id: 'research',
     mesh: new Float32Array(m.data),
+    solids: m.solids(),
     pivots,
     parts: 6,
     assembly: [
@@ -363,6 +366,7 @@ function amberSky(): Room {
   return {
     id: 'projects',
     mesh: new Float32Array(m.data),
+    solids: m.solids(),
     culledFrom,
     pivots,
     parts: 7,
@@ -489,6 +493,7 @@ function endlessStair(): Room {
   return {
     id: 'activity',
     mesh: new Float32Array(m.data),
+    solids: m.solids(),
     pivots,
     parts: 5,
     assembly: [
@@ -612,6 +617,7 @@ function violetTree(): Room {
   return {
     id: 'contact',
     mesh: new Float32Array(m.data),
+    solids: m.solids(),
     pivots,
     parts: 14,
     assembly,

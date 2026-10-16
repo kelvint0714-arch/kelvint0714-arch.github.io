@@ -150,9 +150,12 @@ uniform vec2 uMatGrad[${MAX_MATS}];
 uniform vec4 uPartFx[${MAX_PARTS}]; // x: presence (0 = still in the mist), y: lit (hovered)
 uniform vec2 uFog;
 uniform vec3 uGlow;
+uniform int uPass;   // 0: whole pieces; 1, 2: pieces half there (depth first, then colour, see-through)
 ${SKY}
 out vec4 outColor;
 void main() {
+  vec4 pf = uPartFx[vPart];
+  if ((uPass == 0) != (pf.x >= 0.999)) discard;
   vec3 n = normalize(vN);
   vec4 fx = uMatFx[vMat];
   vec3 c;
@@ -174,12 +177,12 @@ void main() {
       c *= 1.0 - 0.06 * seam;
     }
   }
-  vec4 pf = uPartFx[vPart];
   // A lit part (hovered): a soft lift towards the glow.
   c = mix(c, c + uGlow * 0.12, pf.y);
+  // Low enough, it melts into the mist (the sky's colour); half there, it is see-through.
   vec3 bg = sky(cssPx());
-  float a = pf.x * (fx.y > 0.0 ? smoothstep(uFog.x, uFog.y, vW.y) : 1.0);
-  outColor = vec4(mix(bg, c, a), 1.0);
+  float mist = fx.y > 0.0 ? smoothstep(uFog.x, uFog.y, vW.y) : 1.0;
+  outColor = vec4(mix(bg, c, mist), uPass == 0 ? 1.0 : pf.x);
 }`;
 
 const SKY_VS = /* glsl */ `#version 300 es
@@ -523,12 +526,13 @@ export class Renderer {
     gl.useProgram(this.mesh.p);
     this.common(this.mesh, w, h, dpr, view, pal);
     let current: Palette | null = null;
-    for (const l of o.layers) {
+    const layer = (l: Layer, pass: number) => {
       const lp = l.pal ?? pal;
       if (lp !== current) {
         this.materials(lp);
         current = lp;
       }
+      gl.uniform1i(this.mesh.u('uPass'), pass);
       gl.uniformMatrix4fv(this.mesh.u('uPart'), false, l.parts);
       gl.uniform4fv(this.mesh.u('uPartFx'), l.partFx);
       const md = l.model;
@@ -540,6 +544,26 @@ export class Renderer {
         gl.drawArrays(gl.TRIANGLES, md.culledFrom, md.count - md.culledFrom);
         gl.disable(gl.CULL_FACE);
       }
+    };
+    // Whole pieces first; then each layer's half-there pieces, seen through: their nearest surface
+    // only (a depth pass first), laid over what stands behind them.
+    for (const l of o.layers) layer(l, 0);
+    for (const l of o.layers) {
+      let fading = false;
+      for (let i = 0; i < MAX_PARTS; i++) {
+        const a = l.partFx[i * 4];
+        if (a > 0.003 && a < 0.999) fading = true;
+      }
+      if (!fading) continue;
+      gl.colorMask(false, false, false, false);
+      layer(l, 1);
+      gl.colorMask(true, true, true, true);
+      gl.depthMask(false);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      layer(l, 2);
+      gl.disable(gl.BLEND);
+      gl.depthMask(true);
     }
     gl.disable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);

@@ -7,11 +7,39 @@ export type V3 = [number, number, number];
 /** Floats per vertex: position, normal, material, part. */
 export const STRIDE = 8;
 
+/** A solid piece's bounds, for keeping moving pieces out of each other. */
+export interface Solid {
+  part: number;
+  min: V3;
+  max: V3;
+}
+
 export class Mesh {
   data: number[] = [];
+  /** The solid pieces (boxes, extrusions, lathes; not decals): their runs of floats, and part. */
+  private prims: [number, number, number][] = [];
 
   get count() {
     return this.data.length / STRIDE;
+  }
+
+  /** Records what a primitive call adds as one solid. */
+  private solid(from: number, part: number) {
+    if (this.data.length > from) this.prims.push([from, this.data.length, part]);
+  }
+
+  /** Each solid's bounds as it stands now (after any `place`). */
+  solids(): Solid[] {
+    return this.prims.map(([a, b, part]) => {
+      const min: V3 = [Infinity, Infinity, Infinity];
+      const max: V3 = [-Infinity, -Infinity, -Infinity];
+      for (let i = a; i < b; i += STRIDE)
+        for (let k = 0; k < 3; k++) {
+          min[k] = Math.min(min[k], this.data[i + k]);
+          max[k] = Math.max(max[k], this.data[i + k]);
+        }
+      return { part, min, max };
+    });
   }
 
   tri(a: V3, b: V3, c: V3, n: V3, mat: number, part: number) {
@@ -26,6 +54,12 @@ export class Mesh {
 
   /** An axis-aligned box. `skip` leaves faces out ('px','nx','py','ny','pz','nz'). */
   box(min: V3, max: V3, mat: number, part = 0, skip = '') {
+    const from = this.data.length;
+    this.boxFaces(min, max, mat, part, skip);
+    this.solid(from, part);
+  }
+
+  private boxFaces(min: V3, max: V3, mat: number, part: number, skip: string) {
     const [x0, y0, z0] = min;
     const [x1, y1, z1] = max;
     if (!skip.includes('py')) this.quad([x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0], mat, part, [0, 1, 0]);
@@ -43,6 +77,12 @@ export class Mesh {
    * plane 'xy': profile (x, y), extruded along z; 'zy': profile (z, y), extruded along x.
    */
   extrude(shape: [number, number][], plane: 'xy' | 'zy', from: number, to: number, mat: number, part = 0, smooth = false) {
+    const start = this.data.length;
+    this.extrudeFaces(shape, plane, from, to, mat, part, smooth);
+    this.solid(start, part);
+  }
+
+  private extrudeFaces(shape: [number, number][], plane: 'xy' | 'zy', from: number, to: number, mat: number, part: number, smooth: boolean) {
     // (drawn without face culling: only the normals need to point outwards, so make it counter-clockwise)
     const profile = signedArea(shape) < 0 ? [...shape].reverse() : shape;
     const at = (p: [number, number], w: number): V3 => (plane === 'xy' ? [p[0], p[1], w] : [w, p[1], p[0]]);
@@ -76,6 +116,12 @@ export class Mesh {
   /** A surface of revolution round the vertical axis through `c`: profile (radius, height) from the
    * bottom up; `seg` facets, flat shaded (the low-poly look). */
   lathe(c: V3, profile: [number, number][], seg: number, mat: number, part = 0, phase = 0) {
+    const start = this.data.length;
+    this.latheFaces(c, profile, seg, mat, part, phase);
+    this.solid(start, part);
+  }
+
+  private latheFaces(c: V3, profile: [number, number][], seg: number, mat: number, part: number, phase: number) {
     for (let s = 0; s < seg; s++) {
       const a0 = phase + (s / seg) * Math.PI * 2;
       const a1 = phase + ((s + 1) / seg) * Math.PI * 2;

@@ -9,7 +9,8 @@ import { buildFigure } from './kit';
 import { blend, roomPalette, skyMix } from './palettes';
 import { MAX_PARTS, project, Renderer, type Beam, type Glow, type Layer, type Model, type Palette, type Puff, type View } from './renderer';
 import { buildRooms, type Assembly, type Pose, type Room } from './rooms';
-import { buildWorld, P, PART_COUNT, type World } from './world';
+import { buildWorld, P, PART_COUNT, PENROSE, type World } from './world';
+import type { Solid } from './geometry';
 
 export interface Anchor {
   id: string;
@@ -45,6 +46,7 @@ const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const lerp3 = (a: V3, b: V3, t: number): V3 => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 
+/** A piece's arrival; with `ry` it also turns (first turning, high up, then dropping into place). */
 type HubAssembly = Assembly & { ry?: number };
 
 /** The great building's intro: when each piece arrives (s), whence, and how. The bridge swings
@@ -60,8 +62,13 @@ const ASSEMBLY: HubAssembly[] = [
   { part: P.crank, at: 1.95, from: [-1.15, 0, 0], fade: false, dur: 0.7 },
   { part: P.crankWheel, at: 1.95, from: [-1.15, 0, 0], fade: false, dur: 0.7 },
   { part: P.ears, at: 2.15, from: [0, -2.3, 0], fade: false, dur: 0.8 },
-  { part: P.penrose, at: 2.3, from: [0, 0.6, 0], fade: true, dur: 1.4 },
-  { part: P.bridge, at: 2.75, from: [0, 0, 0], fade: false, dur: 0.9, ry: Math.PI / 2 },
+  // The triangle's beams slide in along their own lengths; the corner closes it.
+  { part: P.penrose, at: 2.0, from: [-3, 0, 0], fade: true, dur: 1.2 },
+  { part: P.penB, at: 2.2, from: [0, 3, 0], fade: true, dur: 1.2 },
+  { part: P.penC, at: 2.4, from: [0, 0, 3], fade: true, dur: 1.2 },
+  { part: P.penK, at: 3.5, from: [0, 0, 0], fade: true, dur: 0.4 },
+  // The bridge turns high over the gap, then drops into it.
+  { part: P.bridge, at: 2.6, from: [0, 2.8, 0], fade: false, dur: 1.2, ry: Math.PI / 2 },
 ];
 
 /** The opening, after Monument Valley's level openings (s): the sky alone and a title card; then
@@ -91,15 +98,20 @@ const AXIS: V3 = [5, 0, 3];
 const FOCUS: V3 = [5, 4.5, 3];
 const easeSine = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 0.5 - 0.5 * Math.cos(Math.PI * t));
 const INTRO_ASSEMBLY: HubAssembly[] = [
-  ...ASSEMBLY.filter((a) => a.part !== P.penrose && a.part !== P.bridge).map((a) => ({ ...a, at: OPENING.rise + a.at * 1.45, dur: a.dur * 1.35 })),
-  { part: P.bridge, at: OPENING.bridge, from: [0, 0, 0], fade: false, dur: 0.9, ry: Math.PI / 2 },
-  { part: P.penrose, at: OPENING.align, from: [0, 0, 0], fade: true, dur: 0.7 },
+  ...ASSEMBLY.filter((a) => !PENROSE.includes(a.part) && a.part !== P.bridge).map((a) => ({ ...a, at: OPENING.rise + a.at * 1.45, dur: a.dur * 1.35 })),
+  { part: P.bridge, at: OPENING.bridge - 0.6, from: [0, 2.8, 0], fade: false, dur: 1.5, ry: Math.PI / 2 },
+  // The triangle's beams fly in while the world is still turning — three loose beams that don't
+  // meet — and the corner closes it only as the turn settles: the moment it becomes impossible.
+  { part: P.penrose, at: 4.6, from: [-6, 0, 0], fade: true, dur: 2.2 },
+  { part: P.penB, at: 5.0, from: [0, 6, 0], fade: true, dur: 2.2 },
+  { part: P.penC, at: 5.4, from: [0, 0, 6], fade: true, dur: 2.2 },
+  { part: P.penK, at: OPENING.align, from: [0, 0, 0], fade: true, dur: 0.35 },
 ];
 /** Coming back to the overview the great building assembles this much faster than in the intro. */
 const RETURN_PACE = 2.4;
 /** How long each piece of a building takes to sink into the mist, and the stagger between pieces. */
 const SINK = 0.5;
-const SINK_STAGGER = 0.045;
+const SINK_STAGGER = 0;
 
 interface Def {
   place: string;
@@ -112,6 +124,8 @@ interface Def {
   room: Room | null;
   /** Its colours by day (0) or dusk (1). */
   pal: (t: number) => Palette;
+  /** The great building's opening (its pieces' paths made clear, like `assembly`'s). */
+  intro?: HubAssembly[];
 }
 
 interface Stage {
@@ -183,8 +197,9 @@ export class Valley {
     this.world = buildWorld();
     this.reduced = opts.reducedMotion;
     this.dark = this.darkTo = opts.dark ? 1 : 0;
-    this.hubDef = this.define('hub', this.world.mesh, this.r.model(this.world.mesh, this.world.culledFrom), PART_COUNT, this.world.pivots, ASSEMBLY, null);
-    for (const room of buildRooms()) this.roomDefs.set(room.id, this.define(room.id, room.mesh, this.r.model(room.mesh, room.culledFrom), room.parts, room.pivots, room.assembly, room));
+    this.hubDef = this.define('hub', this.world.mesh, this.r.model(this.world.mesh, this.world.culledFrom), PART_COUNT, this.world.pivots, clearPaths(ASSEMBLY, this.world.solids), null);
+    this.hubDef.intro = clearPaths(INTRO_ASSEMBLY, this.world.solids);
+    for (const room of buildRooms()) this.roomDefs.set(room.id, this.define(room.id, room.mesh, this.r.model(room.mesh, room.culledFrom), room.parts, room.pivots, clearPaths(room.assembly, room.solids), room));
     this.figLayer = { model: this.r.model(buildFigure()), parts: new Float32Array(MAX_PARTS * 16), partFx: new Float32Array(MAX_PARTS * 4) };
     this.stage = this.spawn(this.hubDef, -1000, 1);
     const home = this.station('about')!;
@@ -495,7 +510,7 @@ export class Valley {
     const bob = (amp: number, period: number, phase: number) => Math.sin((t / period) * Math.PI * 2 + phase) * amp;
     if (part === P.hanging) return { off: [0, bob(0.14, 6.5, 0), 0] };
     if (part === P.pavilion) return { off: [0, bob(0.16, 7.5, 1.7), 0] };
-    if (part === P.penrose) return { off: [0, bob(0.22, 9, 3.1), 0] };
+    if (PENROSE.includes(part)) return { off: [0, bob(0.22, 9, 3.1), 0] };
     if (part === P.crankWheel) return { rx: (this.hotLevel.get('activity') ?? 0) * 0.35 };
     return {};
   }
@@ -507,15 +522,22 @@ export class Valley {
     const off: V3 = own.off ? [own.off[0], own.off[1], own.off[2]] : [0, 0, 0];
     let ry = own.ry ?? 0;
     let alpha = 1;
-    const list = this.intro && !def.room ? INTRO_ASSEMBLY : def.assembly;
+    const list = this.intro && def.intro ? def.intro : def.assembly;
     const a = list.find((x) => x.part === part);
     const t = (this.clock - st.born) * st.pace;
     if (a && t < a.at + a.dur + 0.05) {
       const k = clamp01((t - a.at) / a.dur);
-      const e = a.fade ? easeOut(k) : easeBack(k);
-      for (let i = 0; i < 3; i++) off[i] += a.from[i] * (1 - e);
-      alpha = a.fade ? easeOut(clamp01(k * 1.4)) : k > 0 ? 1 : 0;
-      if (a.ry) ry += (1 - easeBack(k)) * a.ry;
+      if (a.ry) {
+        // Turning high over its place, then dropping into it (so it never turns through anything).
+        ry += (1 - easeBack(k / 0.55)) * a.ry;
+        const e = easeOut((k - 0.5) / 0.5);
+        for (let i = 0; i < 3; i++) off[i] += a.from[i] * (1 - e);
+      } else {
+        // (no overshoot: a piece settling on another must not dip into it)
+        const e = a.fade ? easeOut(k) : easeQuint(k);
+        for (let i = 0; i < 3; i++) off[i] += a.from[i] * (1 - e);
+      }
+      alpha = a.fade ? easeOut(clamp01(k * 1.4)) : clamp01(k * 6);
     }
     if (st.dies < Infinity) {
       // Sinking: last in, first out.
@@ -569,6 +591,32 @@ export class Valley {
         for (const p of s.parts) fx[p * 4 + 1] = Math.max(fx[p * 4 + 1], lit);
       }
     }
+  }
+
+  /**
+   * The light between the tall tower's rune and the impossible triangle over it: it rises once the
+   * triangle has closed, breathes with it, and brightens when Research (the rune) is pointed at.
+   */
+  private tether(st: Stage, weight: number): { beam: Beam; glow: Glow } | null {
+    const list = this.intro && st.def.intro ? st.def.intro : st.def.assembly;
+    const corner = list.find((a) => a.part === P.penK);
+    const age = (this.clock - st.born) * st.pace;
+    const on = corner ? clamp01((age - corner.at - corner.dur * 0.5) / 0.9) : 1;
+    if (on * weight <= 0.004) return null;
+    const t = this.reduced ? 0 : this.clock;
+    const hot = this.hotLevel.get('research') ?? 0;
+    // (in the opening the beam's first light flares, then settles)
+    const flare = this.intro ? Math.sin(Math.PI * clamp01((age - (corner?.at ?? 0)) / 1.4)) * 0.5 : 0;
+    const a = (0.34 + 0.06 * this.dark + 0.35 * hot + flare) * (0.82 + 0.18 * Math.sin(t * 1.6 + 1.5)) * easeOut(on) * weight;
+    const from = this.world.tether.from;
+    const to = this.lifted(this.world.tether.to, P.penrose);
+    const side: V3 = [Math.SQRT1_2, 0, -Math.SQRT1_2];
+    const at = (p: V3, w: number, s: number): V3 => [p[0] + side[0] * w * s, p[1], p[2] + side[2] * w * s];
+    const color = blend(this.dark).glow;
+    return {
+      beam: { quad: [at(from, 0.62, -1), at(from, 0.62, 1), at(to, 0.42, 1), at(to, 0.42, -1)], color, a: a * 0.9 },
+      glow: { at: to, r: 1.3 + 0.4 * hot, a: a * 0.9, color },
+    };
   }
 
   /** The opening's turn of the world (0 once it has settled). */
@@ -717,6 +765,13 @@ export class Valley {
       layers.push(st.layer);
       const fading = st.dies < Infinity ? 1 - clamp01((this.clock - st.dies) / SINK) : 1;
       glows = glows.concat(this.glows(st, fading));
+      if (!st.def.room) {
+        const tie = this.tether(st, fading);
+        if (tie) {
+          beams.push(tie.beam);
+          glows.push(tie.glow);
+        }
+      }
       const room = st.def.room;
       if (room) {
         const since = this.clock - st.born;
@@ -785,6 +840,70 @@ function rotation(rx: number, ry: number, rz: number): number[] {
   };
   const m = mul(mul(Ry, Rx), Rz);
   return [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]];
+}
+
+const easeQuint = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.pow(1 - t, 5));
+
+/**
+ * Makes each piece's way in clear of what already stands (or is still arriving): its path is swept
+ * against the solids of the pieces before it. If it would pass through one, it comes another way —
+ * from above instead of below, or from a side — or, failing all, simply fades in where it is.
+ * Pieces arriving together the same way move as one. Turning pieces are left as they are.
+ */
+function clearPaths(list: HubAssembly[], solids: Solid[]): HubAssembly[] {
+  const out = list.map((a) => ({ ...a, from: [...a.from] as V3 }));
+  const listed = new Set(out.map((a) => a.part));
+  // Where an arriving piece is at time t (null before it starts), as pose() moves it.
+  const offAt = (a: HubAssembly, f: V3, t: number): V3 | null => {
+    if (t < a.at) return null;
+    const k = clamp01((t - a.at) / a.dur);
+    const e = a.ry ? easeOut((k - 0.5) / 0.5) : a.fade ? easeOut(k) : easeQuint(k);
+    return [f[0] * (1 - e), f[1] * (1 - e), f[2] * (1 - e)];
+  };
+  const E = 0.03;   // (touching is not passing through)
+  const hit = (a: Solid, da: V3, b: Solid, db: V3) =>
+    [0, 1, 2].every((k) => a.min[k] + da[k] < b.max[k] + db[k] - E && b.min[k] + db[k] < a.max[k] + da[k] - E);
+  const groups = new Map<string, HubAssembly[]>();
+  for (const a of out) {
+    const key = `${a.at}|${a.from.join(',')}|${a.ry ?? 0}`;
+    groups.set(key, [...(groups.get(key) ?? []), a]);
+  }
+  const order = [...groups.values()].sort((g, h) => g[0].at - h[0].at);
+  const done: HubAssembly[] = [];
+  for (const g of order) {
+    const a = g[0];
+    const ids = g.map((x) => x.part);
+    const mine = solids.filter((s) => ids.includes(s.part));
+    if (!a.ry && a.from.some((v) => v !== 0) && mine.length) {
+      // What may stand in the way: pieces never assembled (always there), and those before it.
+      const others = solids.filter((s) => !ids.includes(s.part) && (!listed.has(s.part) || done.some((x) => x.part === s.part)));
+      // (two solids already set into each other where they stand — a pillar through a walk — are
+      // joined: it may rise out of the other)
+      const zero: V3 = [0, 0, 0];
+      const clear = (f: V3) => {
+        for (let i = 0; i <= 24; i++) {
+          const t = a.at + (a.dur * i) / 24;
+          const dm = offAt(a, f, t)!;
+          for (const o of others) {
+            const oa = done.find((x) => x.part === o.part);
+            const d = oa ? offAt(oa, oa.from, t) : ([0, 0, 0] as V3);
+            if (!d) continue;
+            if (mine.some((b) => hit(b, dm, o, d) && !hit(b, zero, o, zero))) return false;
+          }
+        }
+        return true;
+      };
+      const m = Math.max(Math.hypot(...a.from), 1.5);
+      const ways: V3[] = [a.from, [0, m, 0], [0, -m, 0], [m, 0, 0], [0, 0, m], [-m, 0, 0], [0, 0, -m]];
+      const way = ways.find(clear);
+      for (const x of g) {
+        x.from = way ? ([...way] as V3) : [0, 0, 0];
+        if (!way) x.fade = true;
+      }
+    }
+    done.push(...g);
+  }
+  return out;
 }
 
 /** Column-major 3×3 product a · b. */

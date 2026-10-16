@@ -12,7 +12,7 @@ Kelvin Tang's personal homepage: one impossible building floating in the mist, i
 
 ### What's on the page
 
-- **An isometric building, rendered live.** A small WebGL2 renderer, no libraries. It uses an orthographic isometric camera, and every face takes one of its stone's three tones: top, left-lit or right-shadowed. Walls brighten towards the top, slabs show faint seams, and the legs melt into the mist below. The building itself is made in code ([`src/world.ts`](src/world.ts)): twin towers with onion domes, a tall tower crowned by a rune, a great arch and a walkway loop, a long stair, a floating pavilion and an impossible triangle in the sky.
+- **An isometric building, rendered live.** A small WebGL2 renderer, no libraries. It uses an orthographic isometric camera, and every face takes one of its stone's three tones: top, left-lit or right-shadowed. Walls brighten towards the top, slabs show faint seams, and the legs melt into the mist below. The building itself is made in code ([`src/world.ts`](src/world.ts)): twin towers with onion domes, a tall tower crowned by a rune, a great arch and a walkway loop, a long stair, a floating pavilion, and over it all a large impossible triangle tied to the tall tower by a column of light rising from its rune. The light and the triangle breathe together, and the light brightens when you point at Research.
 - **Day and dusk.** The light follows the system: a warm sandy day in light mode, a teal dusk with cyan glows in dark mode. The header switch cycles Auto, Day and Dusk, and the browser remembers the choice.
 - **Five doors, five worlds.** Each section is a place on the great building, marked by a small label on a fine line. Going in, the camera leans towards that door while the great building sinks into the mist. The sky then turns to another world's, that world's building assembles out of the mist, and the white traveller steps out of its door. Each world has its own colours, by day and by dusk, after *Monument Valley*'s levels:
   - About: the door at the foot of the twin towers leads to **the Lotus Palace**: pink and periwinkle walls, pagoda roofs, a pool with a turning lotus, and two rooms cut open in the walls (a little stair, a bookshelf, a friend reading).
@@ -21,8 +21,8 @@ Kelvin Tang's personal homepage: one impossible building floating in the mist, i
   - Activity: the crank beside the stair leads to **the Endless Stair**, a jade stair round a dark tower on rocks in a green pond. The traveller climbs it for ever; behind the tower, where no one can see, it starts again.
   - Contact: the pavilion below leads to **the Violet Tree**: a door pours a beam of light up a curved ramp, golden rings turn over it, and a tree of pink cubes breathes.
 
-  The panel rises beside the building. Moving between sections, one world sinks and the next one rises; coming back, the great building assembles again.
-- **An opening, about ten seconds, after Monument Valley's.** A chapter card (*Ⅰ · A Quiet Valley*) comes in letter by letter over an empty sky, where the clouds drift. Then the world turns a quarter round into its isometric angle as the camera draws back, the clouds part and the pieces rise out of the mist. The bridge swings across and clicks in as the turn settles, and the impossible triangle appears at the moment everything lines up. The five places light up one by one, the traveller steps out of her door, the building glides aside and the page comes in. Any key or tap skips it; it plays once per tab, and `?intro` replays it.
+  The panel rises beside the building. Moving between sections, one world sinks and the next one rises; coming back, the great building assembles again. No piece ever passes through another: each one's way in is checked against what already stands, and it comes from above or from the side when the way up is blocked.
+- **An opening, about ten seconds, after Monument Valley's.** A chapter card (*Ⅰ · A Quiet Valley*) comes in letter by letter over an empty sky, where the clouds drift. Then the world turns a quarter round into its isometric angle as the camera draws back, the clouds part and the pieces rise out of the mist. The impossible triangle's three beams fly in while the world is still turning, loose and not meeting, and close into the triangle only as the turn settles; then the light rises from the tower into it. The five places light up one by one, the traveller steps out of her door, the building glides aside and the page comes in. Any key or tap skips it; it plays once per tab, and `?intro` replays it.
 - **Research** is an index of papers. Each paper has its own page at `#research/<slug>`; with none yet, the index reads *Unlocked*.
 - **Projects** follow GitHub visibility. Only public repositories are listed: one made private drops out, one made public appears. The build carries a snapshot, and opening the section asks GitHub for the current list (cached for ten minutes).
 - **Activity** shows a year of commits as a heat map, synced at build.
@@ -65,7 +65,7 @@ Kelvin Tang 的个人主页：一座悬浮在雾中的不可能建筑，致敬�
 
 ### 页面上有什么
 
-- **实时渲染的等距建筑。** 一个小巧的 WebGL2 渲染器，不依赖任何库。它使用正交等距相机，每个面取石材的三种色调之一：顶面、受光的左面、背光的右面。墙面越往上越亮，石板有淡淡的接缝，底部的柱脚融进下方的雾里。建筑本身用代码搭成（[`src/world.ts`](src/world.ts)）：带洋葱顶的双塔、顶上有符文的高塔、巨大的拱门与环形步道、长长的阶梯、漂浮的亭子，还有天上一个不可能三角。
+- **实时渲染的等距建筑。** 一个小巧的 WebGL2 渲染器，不依赖任何库。它使用正交等距相机，每个面取石材的三种色调之一：顶面、受光的左面、背光的右面。墙面越往上越亮，石板有淡淡的接缝，底部的柱脚融进下方的雾里。建筑本身用代码搭成（[`src/world.ts`](src/world.ts)）：带洋葱顶的双塔、顶上有符文的高塔、巨大的拱门与环形步道、长长的阶梯、漂浮的亭子；建筑上方悬着一个大的不可能三角，一道光从高塔的符文升起，连到三角最低的角上。光和三角一起呼吸，鼠标指向 Research 时光会变亮。
 - **白昼与暮色。** 光线跟随系统：浅色模式是温暖的沙色白昼，深色模式是青灰暮色配青色微光。右上角的开关可在 自动 / 白昼 / 暮色 之间切换，浏览器会记住你的选择。
 - **五扇门，五个世界。** 每个板块都是大建筑上的一个地点，用一根细线和小标签标出。走进去时，镜头倾向那扇门，大建筑沉入雾中；随后天空换成另一个世界的颜色，那里的建筑从雾里拼合出来，白衣旅人从它的门里走出。每个世界都有自己的配色（白昼与暮色各一套），致敬《纪念碑谷》的关卡：
   - About：双塔脚下的门，通往**莲花宫**：粉色与长春花蓝的墙，宝塔屋顶，水池里一朵慢慢旋转的莲花，墙上剖开两间小屋（小楼梯、书架、正在读书的朋友）。
@@ -74,8 +74,8 @@ Kelvin Tang 的个人主页：一座悬浮在雾中的不可能建筑，致敬�
   - Activity：阶梯旁的摇柄，通往**无尽阶梯**：绿色水塘中的岩石上，翠色阶梯绕着暗色高塔盘旋。旅人永远在向上走；在塔后无人看见的地方，阶梯又从头开始。
   - Contact：下方的亭子，通往**紫罗兰之树**：一扇门把光束洒上弧形坡道，金色圆环在上方旋转，一棵粉色方块组成的树在轻轻呼吸。
 
-  面板在建筑旁升起。在板块之间切换时，一个世界沉下、下一个升起；返回时，大建筑重新拼合。
-- **约 10 秒的开场，仿照《纪念碑谷》。** 空旷的天空里云在飘，章节卡（*Ⅰ · A Quiet Valley*）一个字母一个字母地浮现。随后整个世界旋转四分之一圈，转到等距视角，镜头同时缓缓拉远，云层散开，建筑块从雾中升起。转动停稳的一刻，桥咔哒一声接上，不可能三角在一切对齐的瞬间出现。五处地点依次亮起，旅人从门里走出，建筑滑到一旁，页面淡入。按任意键或轻触即可跳过；每个标签页只播一次，网址加 `?intro` 可重播。
+  面板在建筑旁升起。在板块之间切换时，一个世界沉下、下一个升起；返回时，大建筑重新拼合。拼合时不会有任何构件穿过另一个：每块的来路都会先和已经立好的部分做碰撞检查，向上的路被挡住时，就改从上方或侧面进来。
+- **约 10 秒的开场，仿照《纪念碑谷》。** 空旷的天空里云在飘，章节卡（*Ⅰ · A Quiet Valley*）一个字母一个字母地浮现。随后整个世界旋转四分之一圈，转到等距视角，镜头同时缓缓拉远，云层散开，建筑块从雾中升起。不可能三角的三根梁在世界还在转动时各自飞来，彼此并不相接；转动停稳的一刻，它们才合成那个不可能三角，随后光从高塔升起连到三角上。五处地点依次亮起，旅人从门里走出，建筑滑到一旁，页面淡入。按任意键或轻触即可跳过；每个标签页只播一次，网址加 `?intro` 可重播。
 - **Research** 是论文索引。每篇论文有自己的页面（`#research/<slug>`）；还没有论文时，列表只显示 *Unlocked*。
 - **Projects** 与 GitHub 仓库的可见性同步。只列出公开仓库：设为私有就消失，设为公开就出现。构建时带一份快照，打开板块时再向 GitHub 取一次当前列表（缓存 10 分钟）。
 - **Activity** 以热力图显示一年的提交记录，构建时同步。
