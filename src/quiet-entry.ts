@@ -1,8 +1,9 @@
-// Keep the existing WebGL experience available without deleting its source or personal data.
-// Roll back instantly with ?legacy, or restore index.html's /src/main.ts entry.
-if(new URLSearchParams(location.search).has('legacy')){
- import('./main');
-}else{
- import('./quiet/main');
+// The page's entry. By default the WebGL valley (src/main.ts); ?v2 opens the Canvas 2D prototype
+// (src/quiet/), kept whole and reachable. ?legacy also opens the WebGL valley (old links keep
+// working).
+if (new URLSearchParams(location.search).has('v2')) {
+  import('./quiet/main');
+} else {
+  import('./main');
 }
 export {};

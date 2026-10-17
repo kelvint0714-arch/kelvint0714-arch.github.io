@@ -446,6 +446,26 @@ button {
   font: italic 400 14px var(--serif);
   letter-spacing: 0.02em;
 }
+.foot-replay {
+  pointer-events: auto;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+.foot-replay:hover,
+.foot-replay:focus-visible {
+  color: var(--ink);
+  text-decoration-color: currentColor;
+}
 
 /* ───────────── states ───────────── */
 

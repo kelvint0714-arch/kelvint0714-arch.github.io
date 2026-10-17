@@ -8,14 +8,12 @@ import { createValley, OPENING, type Anchor } from './valley';
 const settings = getSettings();
 applySettings(settings);
 
-let seen = false;
-try {
-  // ?intro plays the intro again even if this tab has seen it.
-  seen = sessionStorage.getItem('mv.intro') === '1' && !new URLSearchParams(location.search).has('intro');
-} catch {}
+// The full opening plays only when asked for (?intro, or "Replay the opening"): by default the page
+// is there from the first frame while the building rises in a couple of seconds.
+const params = new URLSearchParams(location.search);
 // Dev-only ?still: open straight onto the settled page (for screenshots).
-const still = import.meta.env.DEV && new URLSearchParams(location.search).has('still');
-const playIntro = !seen && !still && !location.hash && settings.motion;
+const still = import.meta.env.DEV && params.has('still');
+const playIntro = params.has('intro') && !still && !location.hash && settings.motion;
 // Set before the page is built, so nothing shows and then fades away.
 if (playIntro) document.body.classList.add('assembling');
 
@@ -100,6 +98,7 @@ app.innerHTML = `
 
   <footer class="foot">
     <span>© ${new Date().getFullYear()} ${esc(profile.name)}</span>
+    <button class="foot-replay" type="button" ${scene ? '' : 'hidden'}>Replay the opening</button>
     <span class="foot-note">Built of stone, light and a little impossibility</span>
   </footer>
 `;
@@ -447,11 +446,18 @@ async function intro(v: NonNullable<typeof scene>) {
   }, 1400);
   window.removeEventListener('keydown', skip);
   window.removeEventListener('pointerdown', skip);
-  try {
-    sessionStorage.setItem('mv.intro', '1');
-  } catch {}
   reveal();
+  replaying = false;
 }
+
+let replaying = false;
+$('.foot-replay').addEventListener('click', () => {
+  if (!scene || replaying || !settings.motion) return;
+  replaying = true;
+  if (location.hash) location.hash = '';
+  document.body.classList.remove('ready', 'dawn');
+  intro(scene);
+});
 
 /* ───────────────────────── boot ───────────────────────── */
 
@@ -460,7 +466,8 @@ if (scene && playIntro) {
   route();
 } else {
   document.body.classList.remove('assembling');
-  scene?.arriveNow();
+  if (scene && settings.motion && !still && !location.hash) scene.enter();
+  else scene?.arriveNow();
   reveal();
   route();
 }
