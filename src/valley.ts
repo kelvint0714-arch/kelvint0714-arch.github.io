@@ -64,7 +64,7 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
  * over it — growing out of itself. With `grow` it unfolds along that axis (0 x, 1 y, 2 z; 3 every
  * way) from `anchor`, or from its pivot, or from its `end` along that axis. Nothing fades in:
  * pieces are solid from their first moment. */
-type HubAssembly = Assembly & { ry?: number; grow?: 0 | 1 | 2 | 3; anchorPart?: number; anchor?: V3; end?: 'min' | 'max' | 'mid'; clip?: number };
+type HubAssembly = Assembly & { ry?: number; grow?: 0 | 1 | 2 | 3; anchorPart?: number; anchor?: V3; end?: 'min' | 'max' | 'mid'; clip?: number; with?: number };
 
 /** The impossible triangle drawn edge by edge, as one stroke: along x out of the corner that will
  * close it, then up, then on towards the eye; last the corner, closing it. */
@@ -95,6 +95,9 @@ function unfolding(t0: number, slow: number): HubAssembly[] {
     { part: P.pillar, at: at(0), from: [0, -5, 0], fade: true, dur: 1.2 * slow },
     { part: P.front, at: at(0.15), from: [0, -4, 0], fade: true, dur: 1.1 * slow },
     { part: P.backL, at: at(0.3), from: [0, -4, 0], fade: true, dur: 1.1 * slow },
+    // (the drawbridge hangs from the back walk and the wheel is set in its wall: they come with it)
+    { part: P.bridge, with: P.backL, at: at(0.3), from: [0, 0, 0], fade: false, dur: 1.1 * slow },
+    { part: P.knob, with: P.backL, at: at(0.3), from: [0, 0, 0], fade: false, dur: 1.1 * slow },
     { part: P.backR, at: at(0.4), from: [0, -4, 0], fade: true, dur: 1.1 * slow },
     { part: P.twins, at: at(0.55), from: [0, -5, 0], fade: true, dur: 1.3 * slow },
     { part: P.stairTower, at: at(0.65), from: [0, -5, 0], fade: true, dur: 1.3 * slow },
@@ -1261,7 +1264,7 @@ function natural(list: HubAssembly[], data: Float32Array, solids: Solid[], fog: 
   }
   // (overlaps thinner than `e` are slivers of trim, not anything passing through)
   const meetBy = (a: { min: V3; max: V3 }, b: { min: V3; max: V3 }, e: number) => [0, 1, 2].every((k) => Math.min(a.max[k], b.max[k]) - Math.max(a.min[k], b.min[k]) > e);
-  return list.map((a0) => {
+  const out = list.map((a0) => {
     const a: HubAssembly = { ...a0, from: [0, 0, 0], fade: false };
     const e = bounds.get(a.part);
     if (!e) return a;
@@ -1333,6 +1336,11 @@ function natural(list: HubAssembly[], data: Float32Array, solids: Solid[], fog: 
     a.grow = 3;
     a.anchor = stands ? [mid[0], e.min[1], mid[2]] : mid;
     return a;
+  });
+  // What is fixed to another piece arrives as part of it: the same way, at the same moment.
+  return out.map((a) => {
+    const lead = a.with === undefined ? undefined : out.find((b) => b.part === a.with);
+    return lead ? { ...lead, part: a.part, with: a.with } : a;
   });
 }
 
