@@ -147,7 +147,8 @@ uniform vec3 uLeft[${MAX_MATS}];
 uniform vec3 uRight[${MAX_MATS}];
 uniform vec4 uMatFx[${MAX_MATS}];   // x: slab seams, y: melts into the mist, z: gradient, w: unused
 uniform vec2 uMatGrad[${MAX_MATS}];
-uniform vec4 uPartFx[${MAX_PARTS}]; // x: presence (0 = still in the mist), y: lit (hovered), z: haze (far off)
+uniform vec4 uPartFx[${MAX_PARTS}]; // x: presence (0 = still in the mist), y: lit (hovered), z: haze (far off),
+                                    // w: the floor it rises through (nothing below it is drawn)
 uniform vec2 uFog;
 uniform vec3 uGlow;
 uniform int uPass;   // 0: whole pieces; 1, 2: pieces half there (depth first, then colour, see-through)
@@ -156,6 +157,7 @@ out vec4 outColor;
 void main() {
   vec4 pf = uPartFx[vPart];
   if ((uPass == 0) != (pf.x >= 0.999)) discard;
+  if (vW.y < pf.w) discard;
   vec3 n = normalize(vN);
   vec4 fx = uMatFx[vMat];
   vec3 c;

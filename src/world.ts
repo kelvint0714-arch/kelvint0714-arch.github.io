@@ -216,7 +216,7 @@ export function buildWorld(): World {
     k.relief('z', z1, x0 + 0.3, x1 - 0.3, HL + 3.45, HL + 5.5, 0.1, [[x0 + 0.55, x0 + 1.0, HL + 4.5], [x1 - 1.0, x1 - 0.55, HL + 4.5]], M.stone, P.twins, false);
     k.bannerZ(x0 + 1.25, top - 0.12, z1, 0.5, 2.2, P.twins);
     // the door: a pointed portal, the door set in it
-    k.relief('x', x1, z0 + 0.3, z1 - 0.3, HL, HL + 2.6, 0.18, [[N - 1.2, N - 0.3, HL + 1.05]], M.stone, P.twins);
+    k.relief('x', x1, N - W + 0.05, z1 - 0.15, HL, HL + 2.6, 0.18, [[N - 1.2, N - 0.3, HL + 1.05]], M.stone, P.twins);
     m.decal([x1 + 0.004, HL, N - 0.38], [0, 0, -1], [0, 1, 0], archShape(0, 0, 0.74, 1.6), M.wood, P.twins);
     k.relief('x', x1, z0 + 0.3, z1 - 0.3, HL + 3.3, HL + 5.5, 0.1, [[z0 + 0.55, z0 + 1.05, HL + 4.4], [z1 - 1.05, z1 - 0.55, HL + 4.4]], M.stone, P.twins, false);
     const capTop = k.cornice(x0, z0, x1, z1, top, P.twins);
@@ -241,7 +241,7 @@ export function buildWorld(): World {
     for (const u of [GZ0, GZ1 - 0.3]) k.pilaster('x', GX1, u, 0.3, BASE.course + 0.14, top - 0.45, 0.09, P.stairTower);
     k.pilaster('z', GZ1, GX0, 0.3, HL + 0.02, top - 0.45, 0.09, P.stairTower);
     // the door (Projects): a pointed portal
-    k.relief('z', GZ1, GX0 + 0.3, GX1 - 0.3, HL, HL + 2.7, 0.18, [[GX0 + 0.68, GX0 + 1.62, HL + 1.1]], M.stone, P.stairTower);
+    k.relief('z', GZ1, N - W + 0.05, GX1 - 0.15, HL, HL + 2.7, 0.18, [[GX0 + 0.68, GX0 + 1.62, HL + 1.1]], M.stone, P.stairTower);
     m.decal([GX0 + 0.78, HL, GZ1 + 0.004], [1, 0, 0], [0, 1, 0], archShape(0, 0, 0.74, 1.65), M.hole, P.stairTower);
     // high up, tall paired windows in niches on the right, one beside the banner in front
     const pair: [number, number, number][] = [[GZ0 + 0.62, GZ0 + 1.22, HL + 5.0], [GZ1 - 1.22, GZ1 - 0.62, HL + 5.0]];
@@ -274,32 +274,32 @@ export function buildWorld(): World {
   pivots[P.crankWheel] = wc;
 
   /* ── the pavilion floating below, in front (Contact) ── */
-  const PC: V3 = [4.0, 0.9, 7.0];
-  m.box([PC[0] - 1.3, PC[1] - 0.35, PC[2] - 1.3], [PC[0] + 1.3, PC[1], PC[2] + 1.3], M.stone, P.pavilion);
-  m.box([PC[0] - 1.3, PC[1], PC[2] - 1.3], [PC[0] + 1.3, PC[1] + 0.08, PC[2] + 1.3], M.floor, P.pavilion);
-  k.friezeZ(PC[0] - 1.3, PC[0] + 1.3, PC[1] - 0.28, PC[2] + 1.3, P.pavilion);
-  k.friezeX(PC[2] - 1.3, PC[2] + 1.3, PC[1] - 0.28, PC[0] + 1.3, P.pavilion);
+  const PC: V3 = [3.8, 0.9, 7.25];
+  m.box([PC[0] - 1.0, PC[1] - 0.35, PC[2] - 1.0], [PC[0] + 1.0, PC[1], PC[2] + 1.0], M.stone, P.pavilion);
+  m.box([PC[0] - 1.0, PC[1], PC[2] - 1.0], [PC[0] + 1.0, PC[1] + 0.08, PC[2] + 1.0], M.floor, P.pavilion);
+  k.friezeZ(PC[0] - 1.0, PC[0] + 1.0, PC[1] - 0.28, PC[2] + 1.0, P.pavilion);
+  k.friezeX(PC[2] - 1.0, PC[2] + 1.0, PC[1] - 0.28, PC[0] + 1.0, P.pavilion);
   for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-    const x = PC[0] + dx * 1.0, z = PC[2] + dz * 1.0;
+    const x = PC[0] + dx * 0.78, z = PC[2] + dz * 0.78;
     m.lathe([x, PC[1] + 0.08, z], [[0.0001, 0], [0.2, 0], [0.2, 0.16], [0.14, 0.24], [0.12, 1.86], [0.17, 1.94], [0.17, 2.02], [0.0001, 2.02]], 10, M.stone, P.pavilion);
   }
   // its arched heads between the columns, on the two faces seen
-  for (const [o, axis] of [[PC[2] + 1.15, 'z'], [PC[0] + 1.15, 'x']] as [number, 'x' | 'z'][]) {
-    const shape: [number, number][] = [[-1.15, 2.1], [-1.15, 1.55]];
+  for (const [o, axis] of [[PC[2] + 0.93, 'z'], [PC[0] + 0.93, 'x']] as [number, 'x' | 'z'][]) {
+    const shape: [number, number][] = [[-0.93, 2.1], [-0.93, 1.6]];
     for (let j = 0; j <= 12; j++) {
       const a = Math.PI - (j / 12) * Math.PI;
-      shape.push([0.85 * Math.cos(a), 1.55 + 0.42 * Math.sin(a)]);
+      shape.push([0.65 * Math.cos(a), 1.6 + 0.36 * Math.sin(a)]);
     }
-    shape.push([1.15, 1.55], [1.15, 2.1]);
+    shape.push([0.93, 1.6], [0.93, 2.1]);
     if (axis === 'z') m.extrude(shape.map(([u, v]) => [PC[0] + u, PC[1] + v] as [number, number]), 'xy', o - 0.15, o, M.stone, P.pavilion, true);
     else m.extrude(shape.map(([u, v]) => [PC[2] - u, PC[1] + v] as [number, number]), 'zy', o - 0.15, o, M.stone, P.pavilion, true);
   }
-  k.cornice(PC[0] - 1.25, PC[2] - 1.25, PC[0] + 1.25, PC[2] + 1.25, PC[1] + 2.1, P.pavilion, 0.12);
-  k.drumDome([PC[0], PC[1] + 2.4, PC[2]], 0.62, 0.45, P.pavilion);
-  for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.pinnacle([PC[0] + dx * 1.12, PC[1] + 2.4, PC[2] + dz * 1.12], 0.17, P.pavilion);
+  k.cornice(PC[0] - 1.0, PC[2] - 1.0, PC[0] + 1.0, PC[2] + 1.0, PC[1] + 2.1, P.pavilion, 0.12);
+  k.drumDome([PC[0], PC[1] + 2.4, PC[2]], 0.52, 0.42, P.pavilion);
+  for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.pinnacle([PC[0] + dx * 0.9, PC[1] + 2.4, PC[2] + dz * 0.9], 0.15, P.pavilion);
   m.box([PC[0] - 0.02, PC[1] + 1.45, PC[2] - 0.02], [PC[0] + 0.02, PC[1] + 2.1, PC[2] + 0.02], M.ink, P.pavilion);
   m.lathe([PC[0], PC[1] + 1.05, PC[2]], [[0.0001, 0], [0.16, 0.12], [0.16, 0.3], [0.0001, 0.42]], 6, M.glow, P.pavilion);
-  k.keel([PC[0], PC[1] - 0.35, PC[2]], 0.9, 1.2, P.pavilion);
+  k.keel([PC[0], PC[1] - 0.35, PC[2]], 0.72, 1.0, P.pavilion);
   pivots[P.pavilion] = PC;
 
   /* ── small stones drifting about ── */
@@ -368,7 +368,7 @@ export function buildWorld(): World {
     {
       id: 'contact',
       anchor: [PC[0], PC[1] + 1.2, PC[2]],
-      walk: [[PC[0] + 0.62, PC[1] + 0.08, PC[2] - 0.55], [PC[0] + 0.35, PC[1] + 0.08, PC[2] + 0.05]],
+      walk: [[PC[0] + 0.42, PC[1] + 0.08, PC[2] - 0.4], [PC[0] + 0.2, PC[1] + 0.08, PC[2] + 0.12]],
       glow: [PC[0], PC[1] + 1.25, PC[2]],
       parts: [P.pavilion],
     },

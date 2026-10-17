@@ -144,6 +144,7 @@ export function kit(m: Mesh) {
   };
   // A rough rock: a few facets, its rings jittered.
   const rock = (c: V3, r: number, h: number, seed: number, part = 0, mat: number = M.rock) => {
+    const from0 = m.data.length;
     let s = seed * 9301 + 49297;
     const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
     const seg = 6;
@@ -164,6 +165,7 @@ export function kit(m: Mesh) {
       const a = pts[rings.length - 1][i], b = pts[rings.length - 1][(i + 1) % seg];
       m.tri(a, top, b, faceN(a, top, b), mat, part);
     }
+    m.mark(from0, part);
   };
   // A two-tier pagoda roof (square, flared) and its spire.
   const pagoda = (c: V3, w: number, part = 0) => {
@@ -256,6 +258,7 @@ export function kit(m: Mesh) {
   };
   // A slab of any outline (x, z, counter-clockwise in x–z, so its sides face outwards), from y0 up to y1.
   const slab = (pts: [number, number][], y0: number, y1: number, mat: number, part = 0, top: number = mat) => {
+    const from = m.data.length;
     for (const [i, j, l] of earClip(pts)) {
       const a = pts[i], b = pts[j], c = pts[l];
       m.tri([a[0], y1, a[1]], [c[0], y1, c[1]], [b[0], y1, b[1]], [0, 1, 0], top, part);
@@ -266,6 +269,7 @@ export function kit(m: Mesh) {
       const dx = q[0] - p[0], dz = q[1] - p[1], l = Math.hypot(dx, dz) || 1;
       m.quad([p[0], y0, p[1]], [q[0], y0, q[1]], [q[0], y1, q[1]], [p[0], y1, p[1]], mat, part, [dz / l, 0, -dx / l]);
     }
+    m.mark(from, part);
   };
   // A star's outline: `n` points, outer and inner radii, round (cx, cz).
   /* ── round and composite forms ── */

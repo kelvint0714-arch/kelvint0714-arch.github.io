@@ -46,26 +46,36 @@ const easeBack = (t: number) => {
 const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-/** A piece's arrival; with `ry` it also turns (first turning, high up, then dropping into place);
- * with `grow` it unfolds out of the face it hangs from (scaled along that axis from its pivot), so
- * it never passes through anything. */
-type HubAssembly = Assembly & { ry?: number; grow?: 0 | 1 | 2; anchorPart?: number };
+/** A piece's arrival. How it comes is worked out from where it stands (see `natural`): out of the
+ * mist below, or up through the top of what it stands on, or — floating, or with nothing clear
+ * over it — growing out of itself. With `grow` it unfolds along that axis (0 x, 1 y, 2 z; 3 every
+ * way) from `anchor`, or from its pivot, or from its `end` along that axis. Nothing fades in:
+ * pieces are solid from their first moment. */
+type HubAssembly = Assembly & { ry?: number; grow?: 0 | 1 | 2 | 3; anchorPart?: number; anchor?: V3; end?: 'min' | 'max' | 'mid'; clip?: number };
 
-/** The great building coming back (s, at its own pace): the triangle first — its sides sliding in
- * along their lengths, the corner closing it — then everything unfolding round it. */
+/** The impossible triangle drawn edge by edge, as one stroke: along x out of the corner that will
+ * close it, then up, then on towards the eye; last the corner, closing it. */
+function drawTriangle(t0: number, d: number): HubAssembly[] {
+  return [
+    { part: P.penrose, at: t0, from: [0, 0, 0], fade: false, dur: d, grow: 0, end: 'min' },
+    { part: P.penB, at: t0 + d, from: [0, 0, 0], fade: false, dur: d, grow: 1, end: 'min' },
+    { part: P.penC, at: t0 + 2 * d, from: [0, 0, 0], fade: false, dur: d, grow: 2, end: 'min' },
+    { part: P.penK, at: t0 + 3 * d, from: [0, 0, 0], fade: false, dur: Math.max(0.4, d * 0.6), grow: 3, end: 'mid' },
+  ];
+}
+
+/** The great building coming back (s, at its own pace): the triangle drawn first, then everything
+ * rising round it. */
 const ASSEMBLY: HubAssembly[] = [
-  { part: P.penrose, at: 0.0, from: [-3, 0, 0], fade: true, dur: 1.1 },
-  { part: P.penB, at: 0.15, from: [0, 3, 0], fade: true, dur: 1.1 },
-  { part: P.penC, at: 0.3, from: [0, 0, 3], fade: true, dur: 1.1 },
-  { part: P.penK, at: 1.15, from: [0, 0, 0], fade: true, dur: 0.35 },
-  ...unfolding(1.3, 1),
+  ...drawTriangle(0, 0.5),
+  ...unfolding(1.85, 1),
   ...farOff(0.6, 1),
 ];
 
-/** Everything under the triangle, unfolding from `t0` (durations times `slow`): the pillar and the
- * front block rise out of the mist, the back walks and the towers after them; the star settles on
- * the pillar; the two stairs fold out of the front block up to the landings; the crank slides out
- * of the block's face; the floating pieces drift in. */
+/** Everything under the triangle, from `t0` (durations times `slow`): the pillar and the front block
+ * rise out of the mist, the back walks and the towers after them; the star rises out of the
+ * pillar's crown; the two stairs fold out of the front block up to the landings; the crank slides
+ * out of the block's face; the floating pieces grow out of the air. */
 function unfolding(t0: number, slow: number): HubAssembly[] {
   const at = (dt: number) => t0 + dt * slow;
   return [
@@ -73,41 +83,39 @@ function unfolding(t0: number, slow: number): HubAssembly[] {
     { part: P.front, at: at(0.15), from: [0, -4, 0], fade: true, dur: 1.1 * slow },
     { part: P.backL, at: at(0.3), from: [0, -4, 0], fade: true, dur: 1.1 * slow },
     { part: P.backR, at: at(0.4), from: [0, -4, 0], fade: true, dur: 1.1 * slow },
-    { part: P.twins, at: at(0.55), from: [0, -5, 0], fade: true, dur: 1.2 * slow },
-    { part: P.stairTower, at: at(0.65), from: [0, -5, 0], fade: true, dur: 1.2 * slow },
-    { part: P.star, at: at(0.8), from: [0, 1.6, 0], fade: true, dur: 0.8 * slow },
-    { part: P.stairL, at: at(1.0), from: [0, 0, 0], fade: false, dur: 0.9 * slow, grow: 0 },
-    { part: P.stairR, at: at(1.15), from: [0, 0, 0], fade: false, dur: 0.9 * slow, grow: 2 },
-    { part: P.crank, at: at(1.3), from: [0, 0, 0], fade: false, dur: 0.6 * slow, grow: 0 },
-    { part: P.crankWheel, at: at(1.3), from: [0, 0, 0], fade: false, dur: 0.6 * slow, grow: 0, anchorPart: P.crank },
-    { part: P.pavilion, at: at(0.9), from: [0, -2.5, 0], fade: true, dur: 1.1 * slow },
-    { part: P.hanging, at: at(1.0), from: [0, 2.5, 0], fade: true, dur: 1.1 * slow },
-    { part: P.isles, at: at(1.1), from: [0, -1.2, 0], fade: true, dur: 1.2 * slow },
+    { part: P.twins, at: at(0.55), from: [0, -5, 0], fade: true, dur: 1.3 * slow },
+    { part: P.stairTower, at: at(0.65), from: [0, -5, 0], fade: true, dur: 1.3 * slow },
+    { part: P.star, at: at(1.0), from: [0, 1.6, 0], fade: true, dur: 0.7 * slow },
+    { part: P.stairL, at: at(1.2), from: [0, 0, 0], fade: false, dur: 0.9 * slow, grow: 0 },
+    { part: P.stairR, at: at(1.35), from: [0, 0, 0], fade: false, dur: 0.9 * slow, grow: 2 },
+    { part: P.crank, at: at(1.5), from: [0, 0, 0], fade: false, dur: 0.6 * slow, grow: 0 },
+    { part: P.crankWheel, at: at(1.5), from: [0, 0, 0], fade: false, dur: 0.6 * slow, grow: 0, anchorPart: P.crank },
+    { part: P.pavilion, at: at(1.25), from: [0, -2.5, 0], fade: true, dur: 0.9 * slow },
   ];
 }
 
 /** The far city behind the page's words, coming up out of the haze from `t0`. */
 function farOff(t0: number, slow: number): HubAssembly[] {
-  return [P.farGate, P.farRotunda, P.farShrine, P.farIsles].map((part, i) => ({ part, at: t0 + i * 0.15 * slow, from: [0, -3, 0] as V3, fade: true, dur: 1.4 * slow }));
+  return [P.farGate, P.farRotunda, P.farShrine, P.farIsles].map((part, i) => ({ part, at: t0 + i * 0.2 * slow, from: [0, -3, 0] as V3, fade: true, dur: 1.5 * slow }));
 }
 
 /** The opening, after Monument Valley's level openings (s): the sky alone and a title card; then
  * the world turns a quarter round into its angle as the camera draws back and the clouds part,
- * the triangle's three sides flying in loose as it turns; they close into the impossible triangle
- * only as the turn settles, and then the building unfolds round it — the aqueduct down into the
- * mist, the towers rising, the jetty and the stair folding out, the bridge clicking across. The
- * five places light up one by one, the traveller steps out of her door, and the page comes in. */
+ * and the impossible triangle is drawn in the air edge by edge, closing as the turn settles; then
+ * the building rises round it out of the mist — the pillar, the walls, the towers — the star comes
+ * up out of the pillar's crown, the stairs fold out. The five places light up one by one, the
+ * traveller steps out of her door, and the page comes in. */
 export const OPENING = {
-  title: 0.4,
-  titleOut: 3.0,
-  turn: 2.4,
-  turnEnd: 7.0,
-  align: 6.85,
-  unfold: 7.05,
-  lights: 9.5,
-  walk: 9.9,
-  dawn: 10.0,
-  end: 11.4,
+  title: 0.6,
+  titleOut: 4.4,
+  turn: 3.2,
+  turnEnd: 10.2,
+  align: 9.4,
+  unfold: 10.1,
+  lights: 14.0,
+  walk: 14.7,
+  dawn: 15.1,
+  end: 16.9,
 };
 export const INTRO_END = OPENING.end;
 /** The quarter turn, and the pull back: how far round the world starts, how near the camera. */
@@ -117,25 +125,23 @@ const NEAR = 1.6;
 const AXIS: V3 = [5, 0, 5];
 const FOCUS: V3 = [5, 7, 5];
 const easeSine = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 0.5 - 0.5 * Math.cos(Math.PI * t));
+const TRI_EDGE = 1.55;
 const INTRO_ASSEMBLY: HubAssembly[] = [
-  // The triangle's sides fly in while the world is still turning — three loose beams that don't
-  // meet — and the corner closes it only as the turn settles: the moment it becomes impossible.
-  { part: P.penrose, at: 3.4, from: [-7, 0, 0], fade: true, dur: 2.4 },
-  { part: P.penB, at: 3.8, from: [0, 7, 0], fade: true, dur: 2.4 },
-  { part: P.penC, at: 4.2, from: [0, 0, 7], fade: true, dur: 2.4 },
-  { part: P.penK, at: OPENING.align, from: [0, 0, 0], fade: true, dur: 0.35 },
-  ...unfolding(OPENING.unfold, 1.25),
-  ...farOff(OPENING.dawn - 0.4, 1),
+  ...drawTriangle(OPENING.align - 3 * TRI_EDGE, TRI_EDGE),
+  ...unfolding(OPENING.unfold, 1.55),
+  ...farOff(OPENING.dawn - 0.6, 1),
 ];
 /** Coming back to the overview the great building assembles this much faster than in the intro. */
 const RETURN_PACE = 2.4;
 /** How long each piece of a building takes to sink into the mist, and the stagger between pieces. */
 const SINK = 0.5;
 const SINK_STAGGER = 0;
+/** No floor: everything of a piece is drawn. */
+const NO_FLOOR = -1e5;
 /** Going through a door she hurries: in at most this long. */
 const EXIT_MAX = 0.85;
 /** The mist between two worlds: how long it takes to part once the next one begins to rise. */
-const VEIL_PART = 1.5;
+const VEIL_PART = 1.2;
 
 interface Def {
   place: string;
@@ -244,10 +250,15 @@ export class Valley {
     this.world = buildWorld();
     this.reduced = opts.reducedMotion;
     this.dark = this.darkTo = opts.dark ? 1 : 0;
-    this.hubDef = this.define('hub', this.world.mesh, this.r.model(this.world.mesh, this.world.culledFrom), PART_COUNT, this.world.pivots, clearPaths(ASSEMBLY, this.world.solids), null, this.world.distant);
-    this.hubDef.intro = clearPaths(INTRO_ASSEMBLY, this.world.solids);
-    for (const room of buildRooms()) this.roomDefs.set(room.id, this.define(room.id, room.mesh, this.r.model(room.mesh, room.culledFrom), room.parts, room.pivots, clearPaths(room.assembly, room.solids), room, room.distant));
+    const hubFog = blend(0).fog;
+    this.hubDef = this.define('hub', this.world.mesh, this.r.model(this.world.mesh, this.world.culledFrom), PART_COUNT, this.world.pivots, natural(ASSEMBLY, this.world.mesh, this.world.solids, hubFog), null, this.world.distant);
+    this.hubDef.intro = natural(INTRO_ASSEMBLY, this.world.mesh, this.world.solids, hubFog);
+    for (const room of buildRooms()) {
+      const fog = roomPalette(room.id, 0).fog;
+      this.roomDefs.set(room.id, this.define(room.id, room.mesh, this.r.model(room.mesh, room.culledFrom), room.parts, room.pivots, natural(room.assembly, room.mesh, room.solids, fog), room, room.distant));
+    }
     this.figLayer = { model: this.r.model(buildFigure()), parts: new Float32Array(MAX_PARTS * 16), partFx: new Float32Array(MAX_PARTS * 4) };
+    this.figLayer.partFx[3] = NO_FLOOR;
     this.stage = this.spawn(this.hubDef, -1000, 1);
     this.restAt(this.hubDef, this.station('about')!.walk);
     for (const s of this.world.stations) this.hotLevel.set(s.id, 0);
@@ -607,7 +618,7 @@ export class Valley {
   }
 
   /** A part of a building this frame: its own motion, then assembling or sinking. */
-  private pose(st: Stage, part: number): { off: V3; rx: number; ry: number; rz: number; alpha: number; scale: V3; anchor: V3 } {
+  private pose(st: Stage, part: number): { off: V3; rx: number; ry: number; rz: number; alpha: number; scale: V3; anchor: V3; floor: number } {
     const def = st.def;
     const own: Pose = def.room ? (this.reduced ? {} : def.room.pose(part, this.clock - st.born, this.clock)) : this.hubPose(part);
     const off: V3 = own.off ? [own.off[0], own.off[1], own.off[2]] : [0, 0, 0];
@@ -615,26 +626,34 @@ export class Valley {
     let alpha = 1;
     const scale: V3 = [1, 1, 1];
     let anchor: V3 = def.pivots[part] ?? [0, 0, 0];
+    let floor = NO_FLOOR;
     const list = this.intro && def.intro ? def.intro : def.assembly;
     const a = list.find((x) => x.part === part);
     const t = (this.clock - st.born) * st.pace;
     if (a && t < a.at + a.dur + 0.05) {
       const k = clamp01((t - a.at) / a.dur);
       if (a.grow !== undefined) {
-        // Unfolding out of the face it hangs from.
-        scale[a.grow] = Math.max(0.002, easeOut(k));
-        if (a.anchorPart !== undefined) anchor = def.pivots[a.anchorPart];
+        // Unfolding out of the face it hangs from, or growing out of itself (never past where it
+        // will stand, so never into anything).
+        const e = Math.max(0.002, easeOut(k));
+        if (a.grow === 3) scale[0] = scale[1] = scale[2] = e;
+        else scale[a.grow] = e;
+        if (a.anchor) anchor = a.anchor;
+        else if (a.anchorPart !== undefined) anchor = def.pivots[a.anchorPart];
       } else if (a.ry) {
         // Turning high over its place, then dropping into it (so it never turns through anything).
         ry += (1 - easeBack(k / 0.55)) * a.ry;
         const e = easeOut((k - 0.5) / 0.5);
         for (let i = 0; i < 3; i++) off[i] += a.from[i] * (1 - e);
       } else {
-        // (no overshoot: a piece settling on another must not dip into it)
-        const e = a.fade ? easeOut(k) : easeQuint(k);
+        // Rising, slowing as it arrives (no overshoot: it must not dip into what it stands on);
+        // nothing of it below the floor it rises through is drawn.
+        const e = easeQuint(k);
         for (let i = 0; i < 3; i++) off[i] += a.from[i] * (1 - e);
+        if (a.clip !== undefined) floor = a.clip;
       }
-      alpha = a.fade ? easeOut(clamp01(k * 1.4)) : clamp01(k * 6);
+      // Solid from its first moment (not there at all before).
+      alpha = t >= a.at ? 1 : 0;
     }
     if (st.dies < Infinity) {
       // Sinking: last in, first out.
@@ -644,7 +663,7 @@ export class Valley {
       off[1] -= 1.4 * easeIn(k);
       alpha *= 1 - easeIn(k);
     }
-    return { off, rx: own.rx ?? 0, ry, rz: own.rz ?? 0, alpha, scale, anchor };
+    return { off, rx: own.rx ?? 0, ry, rz: own.rz ?? 0, alpha, scale, anchor, floor };
   }
 
   /** A point carried with its part of the great building (a station on a floating piece floats). */
@@ -661,9 +680,10 @@ export class Valley {
       fx[i * 4] = 0;
       fx[i * 4 + 1] = 0;
       fx[i * 4 + 2] = 0;
+      fx[i * 4 + 3] = NO_FLOOR;
     }
     for (let i = 0; i < st.def.parts; i++) {
-      const { off, rx, ry, rz, alpha, scale, anchor } = this.pose(st, i);
+      const { off, rx, ry, rz, alpha, scale, anchor, floor } = this.pose(st, i);
       const pv = st.def.pivots[i] ?? [0, 0, 0];
       const r = rotation(rx, ry, rz);
       let t: V3 = [
@@ -696,6 +716,7 @@ export class Valley {
       M.set([rr[0], rr[1], rr[2], 0, rr[3], rr[4], rr[5], 0, rr[6], rr[7], rr[8], 0, t[0], t[1], t[2], 1], i * 16);
       fx[i * 4] = alpha;
       fx[i * 4 + 2] = st.def.distant[i] ?? 0;
+      fx[i * 4 + 3] = floor;
     }
     if (!st.def.room) {
       for (const s of this.world.stations) {
@@ -721,7 +742,10 @@ export class Valley {
     const flare = this.intro ? Math.sin(Math.PI * clamp01((age - (corner?.at ?? 0)) / 1.4)) * 0.5 : 0;
     const a = (0.34 + 0.06 * this.dark + 0.35 * hot + flare) * (0.82 + 0.18 * Math.sin(t * 1.6 + 1.5)) * easeOut(on) * weight;
     const from = this.world.tether.from;
-    const to = this.lifted(this.world.tether.to, P.penrose);
+    // (it rises from the rune to the triangle, rather than appearing whole)
+    const top = this.lifted(this.world.tether.to, P.penrose);
+    const reach = easeOut(on);
+    const to: V3 = [from[0] + (top[0] - from[0]) * reach, from[1] + (top[1] - from[1]) * reach, from[2] + (top[2] - from[2]) * reach];
     const side: V3 = [Math.SQRT1_2, 0, -Math.SQRT1_2];
     const at = (p: V3, w: number, s: number): V3 => [p[0] + side[0] * w * s, p[1], p[2] + side[2] * w * s];
     const color = blend(this.dark).glow;
@@ -748,11 +772,11 @@ export class Valley {
   /** The opening's clouds: a bank over the valley at first, parting as the world turns. */
   private openingClouds(pal: Palette): Puff[] {
     const t = this.clock - this.stage.born;
-    const gone = clamp01((t - 2.4) / 3.4);
+    const gone = clamp01((t - 3.4) / 5.0);
     if (gone >= 1) return [];
     const white: number[] = [1, 1, 1];
     const color = pal.skyIn.map((c, i) => lerp(c, white[i], 0.45 - 0.3 * this.dark)) as [number, number, number];
-    const open = easeOut(clamp01((t - 0.8) / 5.0));
+    const open = easeOut(clamp01((t - 1.2) / 7.0));
     return Array.from({ length: 12 }, (_, i) => {
       const a = (i / 12) * Math.PI * 2 + 0.4;
       const r = 1.5 + (i % 3) * 1.1 + open * (7 + (i % 4) * 1.5);
@@ -835,7 +859,7 @@ export class Valley {
           at: [view.origin[0] + a * R[0] + b * U[0], view.origin[1] + b * U[1], view.origin[2] + a * R[2] + b * U[2]],
           r: (rpx * (0.85 + 0.35 * h2)) / view.scale,
           color,
-          a: 0.82 * rise * (1 - e),
+          a: 0.7 * rise * (1 - e),
         });
       }
     }
@@ -847,25 +871,28 @@ export class Valley {
     const dusk = this.dark;
     const pulse = (k: number) => (this.reduced ? 1 : 0.85 + 0.15 * Math.sin(t * 1.6 + k));
     const age = (this.clock - st.born) * st.pace;
+    // Lights come on once the building stands, each opening out from its source.
+    const list = this.intro && st.def.intro ? st.def.intro : st.def.assembly;
+    const built = Math.max(...list.map((a) => a.at + a.dur));
     if (st.def.room) {
-      const on = clamp01((age - 0.9) / 0.8) * weight;
+      const on = clamp01((age - built + 0.1) / 0.8);
       const pal = st.layer.pal ?? st.def.pal(dusk);
-      return st.def.room.glows.map((g, i) => ({ at: g.at, r: g.r, a: (0.3 + 0.3 * dusk) * pulse(i) * on, color: pal.mats[g.mat].top }));
+      return st.def.room.glows.map((g, i) => ({ at: g.at, r: g.r * (0.25 + 0.75 * easeOut(on)), a: (0.26 + 0.26 * dusk) * pulse(i) * on * weight, color: pal.mats[g.mat].top }));
     }
     return this.world.stations.map((s, i) => {
       const hot = this.hotLevel.get(s.id)!;
-      let shown = clamp01((age - 2.0) / 1.0);
+      let shown = clamp01((age - built + 0.2) / 0.9);
       let bloom = 0;
       if (this.intro) {
-        // In the opening the places light up one after another, each with a soft bloom.
-        const k = (age - OPENING.lights - i * 0.2) / 0.8;
-        shown = clamp01(k * 1.6);
-        bloom = Math.sin(Math.PI * clamp01(k)) * 1.4;
+        // In the opening the places light up one by one, each opening out with a little bloom.
+        const k = (age - OPENING.lights - i * 0.25) / 0.9;
+        shown = clamp01(k * 1.4);
+        bloom = Math.sin(Math.PI * clamp01(k)) * 0.45;
       }
       return {
         at: this.lifted(s.glow, s.parts[0]),
-        r: 0.75 + 0.35 * hot + 0.5 * bloom,
-        a: (0.16 + 0.22 * dusk + 0.3 * hot) * pulse(s.anchor[0]) * shown * weight * (1 + bloom),
+        r: (0.7 + 0.35 * hot + 0.3 * bloom) * (0.3 + 0.7 * easeOut(shown)),
+        a: (0.15 + 0.2 * dusk + 0.3 * hot) * pulse(s.anchor[0]) * shown * weight * (1 + bloom),
       };
     });
   }
@@ -1030,65 +1057,82 @@ function rotation(rx: number, ry: number, rz: number): number[] {
 const easeQuint = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.pow(1 - t, 5));
 
 /**
- * Makes each piece's way in clear of what already stands (or is still arriving): its path is swept
- * against the solids of the pieces before it. If it would pass through one, it comes another way —
- * from above instead of below, or from a side — or, failing all, simply fades in where it is.
- * Pieces arriving together the same way move as one. Turning pieces are left as they are.
+ * How each piece arrives, from where it stands. Standing in the mist, it rises out of the mist;
+ * standing on another piece, it rises up through that piece's top (nothing of it is drawn below
+ * that floor, so it never shows passing through anything); floating — or with something in the way
+ * of its rise — it grows out of itself, which never takes it past where it will stand. Pieces given
+ * a `grow` keep it (their anchor found from `end`). Nothing fades in: pieces are solid.
  */
-function clearPaths(list: HubAssembly[], solids: Solid[]): HubAssembly[] {
-  const out = list.map((a) => ({ ...a, from: [...a.from] as V3 }));
-  const listed = new Set(out.map((a) => a.part));
-  // Where an arriving piece is at time t (null before it starts), as pose() moves it.
-  const offAt = (a: HubAssembly, f: V3, t: number): V3 | null => {
-    if (t < a.at) return null;
-    const k = clamp01((t - a.at) / a.dur);
-    const e = a.ry ? easeOut((k - 0.5) / 0.5) : a.fade ? easeOut(k) : easeQuint(k);
-    return [f[0] * (1 - e), f[1] * (1 - e), f[2] * (1 - e)];
-  };
-  const E = 0.03;   // (touching is not passing through)
-  const hit = (a: Solid, da: V3, b: Solid, db: V3) =>
-    [0, 1, 2].every((k) => a.min[k] + da[k] < b.max[k] + db[k] - E && b.min[k] + db[k] < a.max[k] + da[k] - E);
-  const groups = new Map<string, HubAssembly[]>();
-  for (const a of out) {
-    const key = `${a.at}|${a.from.join(',')}|${a.ry ?? 0}`;
-    groups.set(key, [...(groups.get(key) ?? []), a]);
-  }
-  const order = [...groups.values()].sort((g, h) => g[0].at - h[0].at);
-  const done: HubAssembly[] = [];
-  for (const g of order) {
-    const a = g[0];
-    const ids = g.map((x) => x.part);
-    const mine = solids.filter((s) => ids.includes(s.part));
-    if (!a.ry && a.from.some((v) => v !== 0) && mine.length) {
-      // What may stand in the way: pieces never assembled (always there), and those before it.
-      const others = solids.filter((s) => !ids.includes(s.part) && (!listed.has(s.part) || done.some((x) => x.part === s.part)));
-      // (two solids already set into each other where they stand — a pillar through a walk — are
-      // joined: it may rise out of the other)
-      const zero: V3 = [0, 0, 0];
-      const clear = (f: V3) => {
-        for (let i = 0; i <= 24; i++) {
-          const t = a.at + (a.dur * i) / 24;
-          const dm = offAt(a, f, t)!;
-          for (const o of others) {
-            const oa = done.find((x) => x.part === o.part);
-            const d = oa ? offAt(oa, oa.from, t) : ([0, 0, 0] as V3);
-            if (!d) continue;
-            if (mine.some((b) => hit(b, dm, o, d) && !hit(b, zero, o, zero))) return false;
-          }
-        }
-        return true;
-      };
-      const m = Math.max(Math.hypot(...a.from), 1.5);
-      const ways: V3[] = [a.from, [0, m, 0], [0, -m, 0], [m, 0, 0], [0, 0, m], [-m, 0, 0], [0, 0, -m]];
-      const way = ways.find(clear);
-      for (const x of g) {
-        x.from = way ? ([...way] as V3) : [0, 0, 0];
-        if (!way) x.fade = true;
-      }
+function natural(list: HubAssembly[], data: Float32Array, solids: Solid[], fog: [number, number]): HubAssembly[] {
+  const bounds = new Map<number, { min: V3; max: V3 }>();
+  for (let i = 0; i < data.length; i += 8) {
+    const p = data[i + 7];
+    let e = bounds.get(p);
+    if (!e) bounds.set(p, (e = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] }));
+    for (let k = 0; k < 3; k++) {
+      e.min[k] = Math.min(e.min[k], data[i + k]);
+      e.max[k] = Math.max(e.max[k], data[i + k]);
     }
-    done.push(...g);
   }
-  return out;
+  // (overlaps thinner than `e` are slivers of trim, not anything passing through)
+  const meetBy = (a: { min: V3; max: V3 }, b: { min: V3; max: V3 }, e: number) => [0, 1, 2].every((k) => Math.min(a.max[k], b.max[k]) - Math.max(a.min[k], b.min[k]) > e);
+  return list.map((a0) => {
+    const a: HubAssembly = { ...a0, from: [0, 0, 0], fade: false };
+    const e = bounds.get(a.part);
+    if (!e) return a;
+    const mid: V3 = [(e.min[0] + e.max[0]) / 2, (e.min[1] + e.max[1]) / 2, (e.min[2] + e.max[2]) / 2];
+    if (a.grow !== undefined) {
+      if (a0.end) {
+        a.anchor = [...mid] as V3;
+        if (a.grow !== 3) a.anchor[a.grow] = a0.end === 'min' ? e.min[a.grow] : a0.end === 'max' ? e.max[a.grow] : mid[a.grow];
+      }
+      return a;
+    }
+    if (a.ry) return { ...a, from: a0.from };
+    const mine = solids.filter((s) => s.part === a.part);
+    const others = solids.filter((s) => s.part !== a.part);
+    const inMist = e.min[1] <= fog[1] - 0.5;
+    const floor = inMist ? Math.max(e.min[1], fog[0] + 0.5) : e.min[1];
+    // (standing: with something whose top is at its foot under most of it — not just near it)
+    const area = Math.max(1e-6, (e.max[0] - e.min[0]) * (e.max[2] - e.min[2]));
+    let under = 0;
+    for (const o of others) {
+      if (Math.abs(o.max[1] - e.min[1]) > 0.3) continue;
+      const w = Math.min(o.max[0], e.max[0]) - Math.max(o.min[0], e.min[0]), d = Math.min(o.max[2], e.max[2]) - Math.max(o.min[2], e.min[2]);
+      if (w > 0 && d > 0) under += w * d;
+    }
+    const stands = inMist || under / area > 0.35;
+    // Its way up: each of its solids swept up from the floor to where it stands. In the way is only
+    // what already stands there and hangs over the floor — rising into its underside would show;
+    // what reaches down to the floor it simply rises up through and out of the top of.
+    const there = (o: Solid) => {
+      const b = list.find((x) => x.part === o.part);
+      return !b || b.at < a.at + Math.max(a.dur, 0.9) * 0.8;
+    };
+    // (rising up into a thing from below and out of its top never shows: its underside is not seen,
+    // and its top is where it comes out. What shows is cutting into its sides.)
+    const inside = (s: Solid, o: Solid) => s.min[0] >= o.min[0] - 0.12 && s.max[0] <= o.max[0] + 0.12 && s.min[2] >= o.min[2] - 0.12 && s.max[2] <= o.max[2] + 0.12;
+    // (what it is set into where it stands, it comes up through by design)
+    const into = (o: Solid) => mine.some((s) => meetBy(s, o, 0.12));
+    let why = stands ? '' : 'floating';
+    const clear = stands && !mine.some((s) => {
+      const swept = { min: [s.min[0], floor, s.min[2]] as V3, max: s.max };
+      const o = others.find((o) => o.min[1] > floor + 0.1 && there(o) && meetBy(swept, o, 0.12) && !inside(s, o) && !into(o));
+      if (o) why = `part ${o.part} [${o.min.map((v) => v.toFixed(1))}]–[${o.max.map((v) => v.toFixed(1))}] in the way of [${s.min.map((v) => v.toFixed(1))}]–[${s.max.map((v) => v.toFixed(1))}]`;
+      return !!o;
+    });
+    // (for the dev tools: why a piece grows in place rather than rising)
+    (a as { why?: string }).why = clear ? undefined : why;
+    if (clear) {
+      a.clip = floor - 0.002;
+      a.from = [0, -(e.max[1] - floor) - 0.05, 0];
+      a.dur = Math.max(a.dur, 0.9);
+    } else {
+      a.grow = 3;
+      a.anchor = stands ? [mid[0], e.min[1], mid[2]] : mid;
+    }
+    return a;
+  });
 }
 
 /** A turn by `a` about the unit axis `u`, as a column-major 3×3 (Rodrigues). */

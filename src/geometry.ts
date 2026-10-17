@@ -28,6 +28,11 @@ export class Mesh {
     if (this.data.length > from) this.prims.push([from, this.data.length, part]);
   }
 
+  /** Records everything added since `from` (built of loose triangles) as one solid. */
+  mark(from: number, part: number) {
+    this.solid(from, part);
+  }
+
   /** Each solid's bounds as it stands now (after any `place`). */
   solids(): Solid[] {
     return this.prims.map(([a, b, part]) => {

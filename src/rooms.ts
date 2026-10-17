@@ -16,11 +16,15 @@ import type { Beam, Palette, Puff, RGB } from './renderer';
 
 export interface Assembly {
   part: number;
-  /** When it arrives (s), whence it comes, and how: fading out of the mist, or clicking into place. */
+  /** When it arrives (s), and whence it comes (only whether from below matters now: the scene
+   * works out how each piece comes from where it stands). */
   at: number;
   from: V3;
   fade: boolean;
   dur: number;
+  /** Unfolds along this axis (0 x, 1 y, 2 z; 3 every way) from this end of itself. */
+  grow?: 0 | 1 | 2 | 3;
+  end?: 'min' | 'max' | 'mid';
 }
 
 export interface Pose {
@@ -56,6 +60,7 @@ export interface Room {
 }
 
 const easeOut = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.pow(1 - t, 3));
+const lerpV = (a: V3, b: V3, k: number): V3 => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 const bob = (t: number, amp: number, period: number, phase = 0) => Math.sin((t / period) * Math.PI * 2 + phase) * amp;
 const top = (pal: Palette, mat: number): RGB => pal.mats[mat].top;
 const circle = (r: number, n = 16): [number, number][] =>
@@ -162,12 +167,12 @@ function lotusPalace(): Room {
   }
   // 1 — the terrace, with a low parapet along its front edges
   m.box([-B - 0.15, 0, -B - 0.15], [B + 0.15, 0.32, B + 0.15], M.floor, 1);
-  k.merlons('x', -B + 2.0, -0.4, 0.32, B - 0.1, 0.24, 0.26, M.trim, 1);
+  k.merlons('x', -B + 2.45, -0.4, 0.32, B - 0.1, 0.24, 0.26, M.trim, 1);
   k.merlons('x', 1.2, B - 1.0, 0.32, B - 0.1, 0.24, 0.26, M.trim, 1);
-  k.merlons('z', -B + 2.0, 1.2, 0.32, B - 0.1, 0.24, 0.26, M.trim, 1);
+  k.merlons('z', -B + 2.45, 1.2, 0.32, B - 0.1, 0.24, 0.26, M.trim, 1);
   // little domed kiosks on the terrace's corners
-  k.chhatri([B - 0.5, 0.32, B - 0.5], 0.85, 1.25, 1);
-  k.chhatri([-B + 0.5, 0.32, -B + 0.5], 0.85, 1.25, 1);
+  k.chhatri([B - 0.35, 0.32, B - 0.35], 0.6, 1.1, 1);
+  k.chhatri([-B + 0.45, 0.32, -B + 0.45], 0.75, 1.2, 1);
   k.friezeZ(-B, B, -0.25, B + 0.15, 1);
   k.friezeX(-B, B, -0.25, B + 0.15, 1);
   pivots[1] = [0, 0, 0];
@@ -316,7 +321,7 @@ function lotusPalace(): Room {
       { part: 2, at: 0.45, from: [0, -3, 0], fade: true, dur: 0.9 },
       { part: 4, at: 0.55, from: [0, -5, 0], fade: true, dur: 1.0 },
       { part: 5, at: 0.65, from: [0, -5, 0], fade: true, dur: 1.0 },
-      { part: 8, at: 0.95, from: [0, 2.5, 0], fade: false, dur: 0.6 },
+      { part: 8, at: 1.75, from: [0, 0, 0], fade: false, dur: 0.7, grow: 0, end: 'min' },
       { part: 6, at: 1.1, from: [0, 2.5, 0], fade: false, dur: 0.6 },
       { part: 7, at: 1.2, from: [0, 2.5, 0], fade: false, dur: 0.6 },
       { part: 3, at: 1.35, from: [0, -0.9, 0], fade: false, dur: 0.6 },
@@ -326,7 +331,6 @@ function lotusPalace(): Room {
       { part: 12, at: 0.6, from: [0, -3, 0], fade: true, dur: 1.1 },
       { part: 13, at: 0.4, from: [0, -4, 0], fade: true, dur: 1.2 },
       { part: 14, at: 0.7, from: [0, -3, 0], fade: true, dur: 1.1 },
-      { part: 15, at: 1.0, from: [0, 1.5, 0], fade: true, dur: 0.9 },
     ],
     walk: [[-B + TW / 2 + 0.93, WY, B - TW / 2 - 0.38], [-1.3, WY, 2.8], [0.6, WY, 2.75]],
     glows: [
@@ -620,13 +624,12 @@ function moonRuins(): Room {
       { part: 4, at: 0.45, from: [0, 3, 0], fade: true, dur: 0.9 },
       { part: 5, at: 0.55, from: [0, 2, 0], fade: true, dur: 0.8 },
       { part: 3, at: 0.7, from: [0, 1.2, 0], fade: true, dur: 0.7 },
-      { part: 6, at: 0.95, from: [0, 1.6, 0], fade: true, dur: 0.9 },
+      { part: 6, at: 1.15, from: [0, 1.6, 0], fade: true, dur: 0.9 },
       { part: 7, at: 1.1, from: [0, 0, 0], fade: true, dur: 0.6 },
       { part: 8, at: 1.0, from: [0, 1.0, 0], fade: true, dur: 0.6 },
       { part: 9, at: 0.35, from: [0, -3, 0], fade: true, dur: 1.2 },
       { part: 10, at: 0.5, from: [0, -3, 0], fade: true, dur: 1.2 },
       { part: 11, at: 0.6, from: [0, -3, 0], fade: true, dur: 1.2 },
-      { part: 12, at: 1.0, from: [0, 1.2, 0], fade: true, dur: 1.0 },
       { part: 13, at: 0.3, from: [0, -2, 0], fade: true, dur: 1.0 },
     ],
     walk: [[LX1 + 0.05, 0, -3.65], [-5.0, 0, -3.65], [-3.3, 0, -1.7], [-2.1, 0, -0.35]],
@@ -819,7 +822,7 @@ function amberSky(): Room {
     pivots[11] = c;
   }
   for (let i = 0; i < 5; i++) {
-    const c = seen(-9.0 - i * 1.7, -5.6 - i * 0.8, 2.6 + i * 1.1);
+    const c = seen(-8.4 - i * 1.5, -8.2 - i * 0.9, 3.0 + i * 1.1);
     m.lathe(c, [[0.0001, -0.3], [0.75, -0.3], [0.75, 0], [0.0001, 0]], 12, i % 2 ? M.wall : M.stone, 12);
   }
   pivots[12] = seen(-13, -11, 5);
@@ -844,7 +847,6 @@ function amberSky(): Room {
       { part: 9, at: 0.35, from: [0, -3, 0], fade: true, dur: 1.0 },
       { part: 10, at: 0.2, from: [0, -5, 0], fade: true, dur: 1.3 },
       { part: 11, at: 0.7, from: [0, 2, 0], fade: true, dur: 1.0 },
-      { part: 12, at: 0.9, from: [0, 1.5, 0], fade: true, dur: 0.9 },
     ],
     walk: [[1.08, 0, 0.45], [1.35, 0, 0.3], [1.1, 0, -1.8]],
     glows: [
@@ -943,11 +945,11 @@ function penroseStair(): Room {
     // its top: a stair up to a house, its door at the stair's head
     steps(m, [X1 - 0.5, BY1, -2.9], [-1, 0, 0], [0, 1, 0], [0, 0, 1], 5, 0.45, 0.3, 1.0, M.accent, 2);
     const hx = X1 - 0.5 - 5 * 0.45;
-    m.box([X0 + 0.4, BY1, -3.6], [hx, BY1 + 3.2, -1.2], M.wall, 2);
-    const ht = k.cornice(X0 + 0.4, -3.6, hx, -1.2, BY1 + 3.2, 2, 0.1, M.trim);
-    k.drumDome([(X0 + 0.4 + hx) / 2, ht, -2.4], 0.78, 0.5, 2);
+    m.box([X0 + 0.4, BY1, -3.1], [hx, BY1 + 3.2, -0.9], M.wall, 2);
+    const ht = k.cornice(X0 + 0.4, -3.1, hx, -0.9, BY1 + 3.2, 2, 0.1, M.trim);
+    k.drumDome([(X0 + 0.4 + hx) / 2, ht, -2.0], 0.74, 0.5, 2);
     k.doorX(hx, BY1 + 1.5, -1.95, 0.7, 1.3, M.hole, 2);
-    k.relief('z', -1.2, X0 + 0.55, hx - 0.15, BY1 + 0.3, BY1 + 2.9, 0.08, [[X0 + 0.95, X0 + 1.55, BY1 + 1.7]], M.wall, 2);
+    k.relief('z', -0.9, X0 + 0.55, hx - 0.15, BY1 + 0.3, BY1 + 2.9, 0.08, [[X0 + 0.95, X0 + 1.55, BY1 + 1.7]], M.wall, 2);
     // its faces: blind arcades, a row of little niches over the stair lying on its side, mouldings
     k.relief('z', Z1, X0 + 0.25, X1 - 0.25, BY0 - 0.2, 0.05, 0.12, [[X0 + 0.7, X0 + 1.4, -0.9], [X0 + 2.0, X0 + 2.7, -0.9], [X1 - 2.6, X1 - 1.9, -0.9], [X1 - 1.3, X1 - 0.6, -0.9]], M.stone, 2);
     k.relief('z', Z1, X0 + 3.3, X1 - 0.25, 1.75, BY1 - 0.6, 0.1, [[X0 + 3.6, X0 + 3.95, 2.35], [X0 + 4.2, X0 + 4.55, 2.35]], M.stone, 2, false);
@@ -963,13 +965,13 @@ function penroseStair(): Room {
     // its right face: a stair climbing straight up it
     steps(m, [X1, -0.4, -3.9], [0, 1, 0], [1, 0, 0], [0, 0, 1], 8, 0.48, 0.2, 1.1, M.accent, 2);
     // a round tower grown out of its far corner, rising over it, domed
-    const tc: V3 = [X0 + 0.4, BY0 - 6, Z0 + 0.4];
-    k.round(tc, 1.7, BY1 + 6.2 - BY0 + 6, M.wall, 2);
-    for (const y of [BY1 + 1.6, BY1 + 4.6]) k.ring([tc[0], y, tc[2]], 1.5, 1.8, 0, 0.14, M.trim, 2);
-    k.ring([tc[0], BY1 + 6.2, tc[2]], 1.2, 2.0, 0, 0.22, M.trim, 2);
-    k.cupola([tc[0], BY1 + 6.42, tc[2]], 1.6, M.roof, 2);
-    k.finial([tc[0], BY1 + 6.42 + 1.6, tc[2]], 0.8, 2, M.gold);
-    for (const [i, y] of [[1, BY1 + 2.4], [3, BY1 + 2.4], [2, BY1 + 5.2]] as [number, number][]) k.onFace(tc, 1.7, 16, i, y, k.archAt(0.5, 1.0), M.hole, 2);
+    const tc: V3 = [X0 + 0.15, BY0 - 6, Z0 + 0.15];
+    k.round(tc, 1.3, BY1 + 6.2 - BY0 + 6, M.wall, 2);
+    for (const y of [BY1 + 1.6, BY1 + 4.6]) k.ring([tc[0], y, tc[2]], 1.1, 1.4, 0, 0.14, M.trim, 2);
+    k.ring([tc[0], BY1 + 6.2, tc[2]], 0.9, 1.6, 0, 0.22, M.trim, 2);
+    k.cupola([tc[0], BY1 + 6.42, tc[2]], 1.25, M.roof, 2);
+    k.finial([tc[0], BY1 + 6.42 + 1.25, tc[2]], 0.7, 2, M.gold);
+    for (const [i, y] of [[1, BY1 + 3.6], [3, BY1 + 3.6], [2, BY1 + 5.2]] as [number, number][]) k.onFace(tc, 1.3, 16, i, y, k.archAt(0.45, 0.9), M.hole, 2);
     pivots[2] = [(X0 + X1) / 2, BY0, (Z0 + Z1) / 2];
   }
   // 3 — a ceiling in the sky, a stair hanging under it upside down to a house hanging upside down
@@ -999,22 +1001,22 @@ function penroseStair(): Room {
   }
   // 4 — a tall wall off to the right, a stair lying on its face climbing it, a door at the top
   {
-    m.box([3.6, -6, -5.6], [9.0, 8.2, -4.8], M.wall, 4);
-    const wt = k.cornice(3.6, -5.6, 9.0, -4.8, 8.2, 4, 0.12, M.trim);
-    k.merlons('x', 3.75, 8.85, wt, -5.0, 0.22, 0.3, M.wall, 4);
-    for (const u of [3.6, 8.72]) k.pilaster('z', -4.8, u, 0.28, -3.0, 8.0, 0.1, 4, M.trim);
-    k.relief('z', -4.8, 3.9, 5.4, -2.6, 6.6, 0.12, [[4.25, 5.05, 3.3]], M.wall, 4);
-    k.relief('z', -4.8, 7.0, 8.7, -2.6, 6.6, 0.12, [[7.45, 8.25, 3.3]], M.wall, 4);
-    for (const x of [4.45, 7.65]) m.decal([x, 0.4, -4.792], [1, 0, 0], [0, 1, 0], archShape(0, 0, 0.4, 2.4), M.hole, 4);
-    steps(m, [5.6, -1.6, -4.8], [0, 1, 0], [0, 0, 1], [1, 0, 0], 12, 0.5, 0.16, 1.2, M.accent, 4);
-    k.doorZ(5.75, 4.5, -4.8, 0.9, 1.7, M.hole, 4);
-    k.frame([5.6, 4.45, -4.8], 'z', 1.2, 1.95, 0.05, M.trim, 4);
-
-    pivots[4] = [6.3, 0, -5.2];
+    const dx = 2.2, top = 7.0;
+    m.box([3.6 + dx, -6, -5.6], [9.0 + dx, top, -4.8], M.wall, 4);
+    const wt = k.cornice(3.6 + dx, -5.6, 9.0 + dx, -4.8, top, 4, 0.12, M.trim);
+    k.merlons('x', 3.75 + dx, 8.85 + dx, wt, -5.0, 0.22, 0.3, M.wall, 4);
+    for (const u of [3.6, 8.72]) k.pilaster('z', -4.8, u + dx, 0.28, -3.0, top - 0.2, 0.1, 4, M.trim);
+    k.relief('z', -4.8, 3.9 + dx, 5.4 + dx, -2.6, top - 0.6, 0.12, [[4.25 + dx, 5.05 + dx, 3.1]], M.wall, 4);
+    k.relief('z', -4.8, 7.0 + dx, 8.7 + dx, -2.6, top - 0.6, 0.12, [[7.45 + dx, 8.25 + dx, 3.1]], M.wall, 4);
+    for (const x of [4.45, 7.65]) m.decal([x + dx, 0.4, -4.792], [1, 0, 0], [0, 1, 0], archShape(0, 0, 0.4, 2.4), M.hole, 4);
+    steps(m, [5.6 + dx, -1.6, -4.8], [0, 1, 0], [0, 0, 1], [1, 0, 0], 12, 0.5, 0.16, 1.2, M.accent, 4);
+    k.doorZ(5.75 + dx, 4.5, -4.8, 0.9, 1.7, M.hole, 4);
+    k.frame([5.6 + dx, 4.45, -4.8], 'z', 1.2, 1.95, 0.05, M.trim, 4);
+    pivots[4] = [6.3 + dx, 0, -5.2];
   }
   // 5 — little green squares drifting (a day's commits)
   const cubes: [V3, number][] = [
-    [[-1.8, 8.6, -0.6], 0.24], [[9.6, 6.2, 1.2], 0.26], [[-6.4, -2.2, 5.6], 0.24], [[11.2, -1.4, 8.2], 0.22], [[7.6, 12.6, -0.4], 0.22],
+    [[-1.8, 8.6, -0.6], 0.24], [[-6.4, -2.2, 5.6], 0.24], [[11.2, -1.4, 8.2], 0.22], [[10.6, 3.2, 6.0], 0.22],
   ];
   for (const [c, sz] of cubes) m.box([c[0] - sz, c[1] - sz, c[2] - sz], [c[0] + sz, c[1] + sz, c[2] + sz], M.leaf, 5);
   pivots[5] = [0, 4, 0];
@@ -1084,12 +1086,12 @@ function penroseStair(): Room {
       { part: 2, at: 0, from: [0, -4, 0], fade: true, dur: 1.0 },
       { part: 4, at: 0.15, from: [0, -5, 0], fade: true, dur: 1.0 },
       { part: 3, at: 0.3, from: [0, 3, 0], fade: true, dur: 1.0 },
-      { part: 0, at: 0.4, from: [0, -3, 0], fade: true, dur: 0.9 },
-      { part: 1, at: 0.6, from: [0, -2, 0], fade: true, dur: 0.8 },
-      { part: 7, at: 0.6, from: [3, 0, 0], fade: true, dur: 0.9 },
-      { part: 8, at: 0.8, from: [0, 0, -3], fade: true, dur: 0.9 },
-      { part: 9, at: 1.0, from: [-3, 0, 0], fade: true, dur: 0.9 },
-      { part: 5, at: 0.9, from: [0, 1.2, 0], fade: true, dur: 0.9 },
+      // the ring drawn flight by flight, round from the door
+      { part: 1, at: 0.4, from: [0, 0, 0], fade: true, dur: 0.6, grow: 3, end: 'mid' },
+      { part: 0, at: 0.7, from: [0, 0, 0], fade: false, dur: 0.6, grow: 2, end: 'min' },
+      { part: 7, at: 1.1, from: [0, 0, 0], fade: false, dur: 0.6, grow: 0, end: 'min' },
+      { part: 8, at: 1.5, from: [0, 0, 0], fade: false, dur: 0.45, grow: 2, end: 'max' },
+      { part: 9, at: 1.8, from: [0, 0, 0], fade: false, dur: 0.45, grow: 0, end: 'max' },
       { part: 6, at: 1.3, from: [0, 0, 0], fade: true, dur: 0.6 },
       { part: 10, at: 0.3, from: [0, -4, 0], fade: true, dur: 1.2 },
       { part: 11, at: 0.5, from: [0, -4, 0], fade: true, dur: 1.1 },
@@ -1313,7 +1315,6 @@ function violetTree(): Room {
     { part: 15, at: 0.35, from: [0, -4, 0], fade: true, dur: 1.2 },
     { part: 16, at: 0.6, from: [0, -3, 0], fade: true, dur: 1.1 },
     { part: 17, at: 0.7, from: [0, -3, 0], fade: true, dur: 1.1 },
-    { part: 18, at: 1.1, from: [0, 1.2, 0], fade: true, dur: 0.8 },
     { part: 4, at: 0.4, from: [0, -4, 0], fade: true, dur: 1.0 },
     { part: 5, at: 0.5, from: [0, -4, 0], fade: true, dur: 1.0 },
     { part: 2, at: 0.55, from: [0, 0, 0], fade: true, dur: 0.8 },
@@ -1346,18 +1347,15 @@ function violetTree(): Room {
       }
       return {};
     },
-    beams: (pal, since, t) => [
-      {
-        quad: [[-9.5, LY + 4.0, -0.5], [-9.5, LY, -0.5], [-3.0, LY + 0.6, -0.5], [-3.0, LY + 6.2, -0.5]],
-        color: top(pal, M.lamp),
-        a: (0.5 + 0.08 * Math.sin(t * 1.3)) * easeOut((since - 0.8) / 1.0),
-      },
-      {
-        quad: [[-9.5, LY + 3.8, -0.1], [-9.5, LY + 0.2, -0.9], [-1.0, LY + 1.4, 0.4], [-1.0, LY + 7.4, -1.2]],
-        color: top(pal, M.lamp),
-        a: 0.24 * easeOut((since - 0.8) / 1.0),
-      },
-    ],
+    // The light pours out of the door once the door stands, reaching out up the ramp.
+    beams: (pal, since, t) => {
+      const reach = easeOut((since - 1.9) / 1.4);
+      const out = (q: V3[]): [V3, V3, V3, V3] => [q[0], q[1], lerpV(q[1], q[2], reach), lerpV(q[0], q[3], reach)];
+      return [
+        { quad: out([[-9.5, LY + 3.6, -0.5], [-9.5, LY, -0.5], [-3.0, LY + 0.6, -0.5], [-3.0, LY + 6.2, -0.5]]), color: top(pal, M.lamp), a: (0.5 + 0.08 * Math.sin(t * 1.3)) * Math.min(1, reach * 2) },
+        { quad: out([[-9.5, LY + 3.4, -0.1], [-9.5, LY + 0.2, -0.9], [-1.0, LY + 1.4, 0.4], [-1.0, LY + 7.4, -1.2]]), color: top(pal, M.lamp), a: 0.24 * Math.min(1, reach * 2) },
+      ];
+    },
   };
 }
 
