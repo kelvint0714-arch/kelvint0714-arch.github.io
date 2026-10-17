@@ -29,6 +29,19 @@ export interface Box {
   h: number;
 }
 
+/** The one mechanism's states (see `mechAction`): the bridge hanging; turning up; up and locked;
+ * the traveller crossing; she on the star; she coming back; the bridge turning down. */
+export type MechState = 'closed' | 'rotating' | 'aligned' | 'crossing' | 'arrived' | 'returning' | 'resetting';
+
+/** What the page shows of the mechanism: what turning the wheel would do now (null while it is
+ * busy), a line about it, and where the wheel is on the screen (null off the overview). */
+export interface MechInfo {
+  state: MechState;
+  action: string | null;
+  note: string;
+  knob: { x: number; y: number } | null;
+}
+
 export interface ValleyOptions {
   reducedMotion: boolean;
   dark: boolean;
@@ -137,6 +150,14 @@ const ENTRANCE_PACE = 2.0;
 const RETURN_PACE = 2.4;
 /** How long a building takes to sink, whole, into the mist (its lights going out first). */
 const SINK = 0.85;
+/** The drawbridge's turn, the pause once it is locked before anyone steps on, and how often the
+ * triangle turns a third of the way round of itself when nothing else moves. */
+const BRIDGE_TURN = 1.1;
+const BRIDGE_HOLD = 0.14;
+const IDLE_TURN_EVERY = 18;
+const IDLE_TURN = 2.8;
+/** Quintic: still at both ends (for things that must start and stop exactly). */
+const ease5 = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * t * (t * (6 * t - 15) + 10));
 /** No floor: everything of a piece is drawn. */
 const NO_FLOOR = -1e5;
 /** Going through a door she hurries: in at most this long. */
@@ -181,6 +202,8 @@ interface Track {
   loop?: boolean;
   /** Going in through a door (she fades over her last steps) rather than coming out. */
   going?: boolean;
+  /** A way across the building (she is there all along: no fading at either end). */
+  route?: boolean;
 }
 
 type Walk = Track & { t0: number; speed: number };
@@ -214,9 +237,25 @@ export class Valley {
   // Light: 0 day, 1 dusk, gliding when the system's appearance changes.
   private dark = 0;
   private darkTo = 0;
-  // The triangle's turn (radians) and its speed.
+  // The triangle's turn (radians): a third of the way round at a time, with the bridge or now and
+  // then on its own, starting and stopping still.
   private spinAngle = 0;
-  private spinSpeed = 0;
+  private turnFrom = 0;
+  private turnTo = 0;
+  private turnT0 = -100;
+  private turnDur = 1;
+  private lastTurn = 0;
+
+  // The mechanism: the drawbridge (0 hanging, 1 up in place) and its state.
+  private bridgeK = 0;
+  private bridgeFrom = 0;
+  private bridgeTo = 0;
+  private bridgeT0 = 0;
+  private mech: MechState = 'closed';
+  private mechHold = 0;
+  private crossAfter: 'over' | 'back' | null = null;
+  private mechSent = '';
+  onMech: ((m: MechInfo) => void) | null = null;
   // The sky crossing from one building's world to the next.
   private skyFrom: Palette | null = null;
   private skyT0 = 0;
@@ -486,7 +525,7 @@ export class Valley {
   private restAt(def: Def, path: V3[]) {
     const tr = this.track(def, path, 'out');
     const end = path[path.length - 1];
-    this.fig = [end[0], tr.ys[tr.ys.length - 1], end[2]];
+    this.fig = [end[0], end[1] + tr.ys[tr.ys.length - 1], end[2]];
     this.walk = null;
     this.figShowAt = -1;
     this.figAlpha = 1;
@@ -494,12 +533,12 @@ export class Valley {
   }
 
   /** A walk made ready (and kept): coming `out` of its first point, going `in` at its last, or a loop. */
-  private track(def: Def, path: V3[], mode: 'out' | 'in' | 'loop'): Track {
+  private track(def: Def, path: V3[], mode: 'out' | 'in' | 'loop' | 'route'): Track {
     const key = def.place + mode + path.map((p) => p.join(',')).join(';');
     let tr = this.tracks.get(key);
     if (tr) return tr;
     let full = path;
-    if (mode !== 'loop' && path.length > 1) {
+    if ((mode === 'out' || mode === 'in') && path.length > 1) {
       // Through a door: from (or to) a little inside the wall, so the wall hides her as she passes.
       const [door, next] = mode === 'out' ? [path[0], path[1]] : [path[path.length - 1], path[path.length - 2]];
       const dx = door[0] - next[0], dz = door[2] - next[2], l = Math.hypot(dx, dz);
@@ -512,7 +551,7 @@ export class Valley {
       }
     }
     const loop = mode === 'loop';
-    tr = { path: full, ys: groundTrack(def.data, full, loop), total: pathLength(full, loop), loop, going: mode === 'in' };
+    tr = { path: full, ys: groundTrack(def.data, full, loop), total: pathLength(full, loop), loop, going: mode === 'in', route: mode === 'route' };
     this.tracks.set(key, tr);
     return tr;
   }
@@ -542,6 +581,7 @@ export class Valley {
    * page there from the first frame (the full opening is kept for replaying). */
   enter() {
     this.intro = false;
+    this.resetMech();
     this.stage = this.spawn(this.hubDef, this.clock, ENTRANCE_PACE);
     this.figAlpha = 0;
     this.walk = null;
@@ -554,6 +594,7 @@ export class Valley {
   /** The intro: the great building assembles out of the mist; resolves when it is done. */
   playIntro(): Promise<void> {
     this.intro = true;
+    this.resetMech();
     this.stage = this.spawn(this.hubDef, this.clock, 1);
     this.figAlpha = 0;
     this.walk = null;
@@ -576,6 +617,140 @@ export class Valley {
     this.kick();
   }
 
+  /* ── the mechanism ── */
+
+  /** Where the traveller is, for the mechanism: resting by the twin towers, on the star, or else. */
+  private where(): 'home' | 'star' | 'elsewhere' {
+    if (this.walk || this.figShowAt >= 0 || this.figStage !== this.stage || this.stage.def.room) return 'elsewhere';
+    const c = this.world.crossing;
+    const home = c[0];
+    if (Math.hypot(this.fig[0] - home[0], this.fig[2] - home[2]) < 0.35 && Math.abs(this.fig[1] - home[1]) < 0.3) return 'home';
+    const star = c[c.length - 1];
+    if (Math.abs(this.fig[1] - star[1]) < 0.3 && Math.hypot(this.fig[0] - 5, this.fig[2] - 5) < 1.6) return 'star';
+    return 'elsewhere';
+  }
+
+  /** Turning the wheel. By the twin towers she crosses once the bridge is up; on the star she comes
+   * back and the bridge goes down after her; anywhere else it only turns the bridge. While
+   * anything is moving it does nothing (it never stacks, and never takes the bridge from under her). */
+  mechAction() {
+    if (!this.settled || this.intro) return;
+    const at = this.where();
+    if (this.reduced) {
+      // (no motion: straight to the next still state)
+      if (this.mech === 'closed' && at === 'home') this.placeAt(this.world.crossing[this.world.crossing.length - 1], 1, 'arrived');
+      else if ((this.mech === 'arrived' || this.mech === 'closed' || this.mech === 'aligned') && at === 'star') this.placeAt(this.world.crossing[0], 0, 'closed');
+      else if (this.mech === 'closed') this.placeAt(null, 1, 'aligned');
+      else if (this.mech === 'aligned') this.placeAt(null, 0, 'closed');
+      this.kick();
+      return;
+    }
+    if (this.mech === 'closed') {
+      this.crossAfter = at === 'home' ? 'over' : at === 'star' ? 'back' : null;
+      this.turnBridge(1);
+    } else if (this.mech === 'arrived' || (this.mech === 'aligned' && at === 'star')) {
+      this.walkAcross('back');
+    } else if (this.mech === 'aligned') {
+      if (at === 'home') this.walkAcross('over');
+      else this.turnBridge(0);
+    }
+    this.kick();
+  }
+
+  private placeAt(p: V3 | null, k: number, state: MechState) {
+    if (p) this.fig = [...p] as V3;
+    this.walk = null;
+    this.bridgeK = this.bridgeFrom = this.bridgeTo = k;
+    this.mech = state;
+  }
+
+  private resetMech() {
+    this.bridgeK = this.bridgeFrom = this.bridgeTo = 0;
+    this.mech = 'closed';
+    this.crossAfter = null;
+  }
+
+  private turnBridge(to: number) {
+    this.mech = to ? 'rotating' : 'resetting';
+    this.bridgeFrom = this.bridgeK;
+    this.bridgeTo = to;
+    this.bridgeT0 = this.clock;
+    // (the triangle turns with it, a third of the way round)
+    this.turnTriangle(BRIDGE_TURN);
+  }
+
+  private turnTriangle(dur: number) {
+    this.turnFrom = this.spinAngle;
+    this.turnTo = this.spinAngle - (Math.PI * 2) / 3;
+    this.turnT0 = this.clock;
+    this.turnDur = dur;
+    this.lastTurn = this.clock + dur;
+  }
+
+  private walkAcross(way: 'over' | 'back') {
+    const c = this.world.crossing;
+    // back: from wherever on the star she stands, to the front of the star, then the way over reversed
+    const path = way === 'over' ? c : [[...this.fig] as V3, ...[...c].reverse().slice(1)];
+    this.walk = { ...this.track(this.hubDef, path, 'route'), t0: this.clock, speed: 0.95 };
+    this.mech = way === 'over' ? 'crossing' : 'returning';
+  }
+
+  /** The mechanism's clock; true while anything of it is moving. */
+  private stepMech(): boolean {
+    if (this.stage.def.room) return false;
+    const m = this.mech;
+    if (m === 'rotating' || m === 'resetting') {
+      const k = (this.clock - this.bridgeT0) / BRIDGE_TURN;
+      this.bridgeK = this.bridgeFrom + (this.bridgeTo - this.bridgeFrom) * ease5(k);
+      if (k >= 1) {
+        this.bridgeK = this.bridgeTo;
+        this.mech = this.bridgeTo ? 'aligned' : 'closed';
+        this.mechHold = this.clock;
+      }
+      return true;
+    }
+    if (m === 'aligned' && this.crossAfter && this.clock - this.mechHold >= BRIDGE_HOLD) {
+      const way = this.crossAfter;
+      this.crossAfter = null;
+      this.walkAcross(way);
+      return true;
+    }
+    if ((m === 'crossing' || m === 'returning') && !this.walk) {
+      if (m === 'crossing') this.mech = 'arrived';
+      else this.turnBridge(0);
+      return true;
+    }
+    return m === 'crossing' || m === 'returning' || (m === 'aligned' && !!this.crossAfter);
+  }
+
+  /** Tells the page what the wheel would do now, and where it is on the screen. */
+  private sendMech() {
+    if (!this.onMech) return;
+    const busy = this.mech === 'rotating' || this.mech === 'resetting' || this.mech === 'crossing' || this.mech === 'returning' || (this.mech === 'aligned' && !!this.crossAfter);
+    const at = this.where();
+    let action: string | null = null, note = '';
+    if (busy) {
+      action = null;
+      note = this.mech === 'crossing' ? 'Crossing to the star…' : this.mech === 'returning' ? 'Coming back across…' : this.mech === 'resetting' ? 'The bridge goes down.' : 'The bridge turns up.';
+    } else if (this.mech === 'closed') {
+      action = at === 'star' ? 'Raise the bridge, come back' : 'Raise the bridge';
+      note = at === 'home' ? 'Two walks, waiting to meet.' : at === 'star' ? 'On the star, the gap between her and home.' : 'The bridge hangs in its gap.';
+    } else if (this.mech === 'arrived' || (this.mech === 'aligned' && at === 'star')) {
+      action = 'Come back, lower the bridge';
+      note = 'Where the far walk meets the star.';
+    } else if (this.mech === 'aligned') {
+      action = at === 'home' ? 'Cross the bridge' : 'Lower the bridge';
+      note = 'The way is open.';
+    }
+    const settled = this.settled && !this.intro && this.anchors().length > 0;
+    const v = this.view();
+    const knob = settled ? project(v, this.world.bridge.knob) : null;
+    const key = `${this.mech}|${action}|${note}|${knob ? Math.round(knob[0]) + ',' + Math.round(knob[1]) : '-'}`;
+    if (key === this.mechSent) return;
+    this.mechSent = key;
+    this.onMech({ state: this.mech, action: settled ? action : null, note, knob: knob ? { x: knob[0], y: knob[1] } : null });
+  }
+
   /* ── the traveller ── */
 
   private stepTraveller() {
@@ -592,14 +767,14 @@ export class Valley {
       if (this.figShowAt >= 0) this.figAlpha = 0;
       return;
     }
-    const { path, ys, total, t0, speed, loop, going } = this.walk;
+    const { path, ys, total, t0, speed, loop, going, route } = this.walk;
     let d = Math.max(0, t - t0) * speed;
     if (loop) d %= total;
     // Coming out of a door she fades in (the wall hides her first steps anyway); going in, she fades
     // over her last.
-    this.figAlpha = going ? clamp01((total - d) / 0.3) : loop ? 1 : clamp01(d / 0.3);
+    this.figAlpha = going ? clamp01((total - d) / 0.3) : loop || route ? 1 : clamp01(d / 0.3);
     const { p, seg } = along(path, Math.min(d, total), loop);
-    p[1] = heightAt(ys, Math.min(d, total));
+    p[1] += heightAt(ys, Math.min(d, total));
     this.fig = p;
     const a = path[seg], b = path[seg + 1];
     if (Math.hypot(b[0] - a[0], b[2] - a[2]) > 0.01 && !isJump(a, b)) this.figYaw = Math.atan2(b[0] - a[0], b[2] - a[2]);
@@ -619,10 +794,12 @@ export class Valley {
 
   /** The great building's own motion: floating pieces breathe, the crank answers a hover. */
   private hubPose(part: number): Pose {
+    // the drawbridge turns about its hinge; the wheel turns twice as it goes
+    if (part === P.bridge) return { rx: this.world.bridge.open * (1 - this.bridgeK) };
+    if (part === P.knob) return { rx: this.bridgeK * Math.PI * 2 };
     if (this.reduced) return {};
     const t = this.clock;
     const bob = (amp: number, period: number, phase: number) => Math.sin((t / period) * Math.PI * 2 + phase) * amp;
-    if (part === P.hanging) return { off: [0, bob(0.16, 6.5, 0), 0] };
     if (part === P.pavilion) return { off: [0, bob(0.16, 7.5, 1.7), 0] };
     if (part === P.isles) return { off: [0, bob(0.12, 5.5, 0.6), 0] };
     if (part === P.crankWheel) return { rz: -(this.hotLevel.get('activity') ?? 0) * 0.5 };
@@ -906,6 +1083,7 @@ export class Valley {
       this.walk = null;
       this.figAlpha = 0;
       this.figStage = this.stage;
+      if (!def.room) this.resetMech();
     }
     if (this.next || this.sinking || this.clock - this.stage.born < 6) busy = true;
 
@@ -914,13 +1092,15 @@ export class Valley {
       this.dark += Math.sign(this.darkTo - this.dark) * Math.min(Math.abs(this.darkTo - this.dark), dt / 0.9);
       busy = true;
     }
-    // The triangle turns once it has closed (slowly; faster while Research is pointed at).
+    // The mechanism, and the triangle's turns.
+    if (this.stepMech()) busy = true;
     {
-      const closed = !this.intro || this.clock - this.stage.born > OPENING.align + 0.3;
-      const want = this.reduced || !closed ? 0 : -(Math.PI * 2) / 56 * (1 + 2.2 * (this.hotLevel.get('research') ?? 0));
-      this.spinSpeed += (want - this.spinSpeed) * Math.min(1, dt * 0.9);
-      this.spinAngle += this.spinSpeed * dt;
-      if (Math.abs(this.spinSpeed) > 1e-4) busy = true;
+      const k = (this.clock - this.turnT0) / this.turnDur;
+      this.spinAngle = this.turnFrom + (this.turnTo - this.turnFrom) * ease5(k);
+      if (k < 1) busy = true;
+      // now and then, when all is still, a third of a turn on its own
+      const still = this.settled && !this.intro && !this.reduced && (this.mech === 'closed' || this.mech === 'arrived' || this.mech === 'aligned');
+      if (still && k >= 1 && this.clock - this.lastTurn > IDLE_TURN_EVERY) this.turnTriangle(IDLE_TURN);
     }
     // Hover fades.
     for (const s of this.world.stations) {
@@ -1000,6 +1180,7 @@ export class Valley {
       dust: this.intro ? clamp01((this.clock - this.stage.born) / 2) : 1,
     });
     this.onFrame?.(this.anchors());
+    this.sendMech();
     if (busy) this.kick();
   };
 }

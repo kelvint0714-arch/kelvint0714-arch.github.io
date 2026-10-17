@@ -3,7 +3,7 @@ import { profile } from './config';
 import { emblem, esc } from './ornaments';
 import { SECTIONS, type Mounted, type Section } from './sections';
 import { applySettings, getSettings, isDark, onSystemTheme, saveTheme, type Theme } from './settings';
-import { createValley, OPENING, type Anchor } from './valley';
+import { createValley, OPENING, type Anchor, type MechInfo } from './valley';
 
 const settings = getSettings();
 applySettings(settings);
@@ -67,6 +67,11 @@ app.innerHTML = `
       </div>
     </section>
     <div class="valley-slot" aria-hidden="true"></div>
+    <div class="mech" ${scene ? '' : 'hidden'}>
+      <button class="mech-act" type="button"><i class="mech-icon" aria-hidden="true">↻</i><span>Raise the bridge</span></button>
+      <p class="mech-note" aria-live="polite">Two walks, waiting to meet.</p>
+    </div>
+    <button class="mech-knob" type="button" hidden aria-label="Turn the wheel"></button>
     <nav class="stations" aria-label="Sections">
       ${SECTIONS.map(
         (s) => `
@@ -217,10 +222,40 @@ function onFrame(anchors: Anchor[]) {
   }
 }
 
+/* ───────────────────────── the mechanism ───────────────────────── */
+
+// The one thing to do on the overview: turn the wheel (the button, or the wheel itself). It is never
+// in the way: every section is a click away whatever the bridge is doing.
+const mech = $('.mech');
+const mechButton = $<HTMLButtonElement>('.mech-act');
+const mechNote = $('.mech-note');
+const knobButton = $<HTMLButtonElement>('.mech-knob');
+let lastAction = 'Raise the bridge';
+function onMech(m: MechInfo) {
+  if (m.action) lastAction = m.action;
+  mechButton.querySelector('span')!.textContent = lastAction;
+  mechButton.disabled = !m.action;
+  mechButton.setAttribute('aria-busy', String(!m.action));
+  mechNote.textContent = m.note;
+  const show = !!m.knob && hubMode() === 'wide' && !current && !observing;
+  knobButton.hidden = !show;
+  if (show && m.knob) {
+    knobButton.style.transform = `translate(${m.knob.x}px, ${m.knob.y}px) translate(-50%, -50%)`;
+    knobButton.disabled = !m.action;
+    knobButton.setAttribute('aria-label', m.action ? `The wheel: ${m.action.toLowerCase()}` : 'The wheel (turning)');
+  }
+  // (under the building, on wide screens)
+  const b = hubBox(innerWidth, innerHeight);
+  mech.style.setProperty('--mech-x', `${Math.round(b.x + b.w / 2)}px`);
+}
+mechButton.addEventListener('click', () => scene?.mechAction());
+knobButton.addEventListener('click', () => scene?.mechAction());
+
 if (scene) {
   scene.hubBox = hubBox;
   scene.roomBox = roomBox;
   scene.onFrame = onFrame;
+  scene.onMech = onMech;
   scene.refit(true);
   window.addEventListener('resize', () => {
     syncMode();

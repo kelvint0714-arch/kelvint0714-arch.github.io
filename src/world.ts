@@ -28,7 +28,7 @@ export const P = {
   crank: 11,
   crankWheel: 12,
   pavilion: 13,
-  hanging: 14,
+  knob: 14,
   isles: 15,
   backL: 16,
   backR: 17,
@@ -37,8 +37,9 @@ export const P = {
   farRotunda: 20,
   farShrine: 21,
   farIsles: 22,
+  bridge: 23,
 } as const;
-export const PART_COUNT = 23;
+export const PART_COUNT = 24;
 /** The far city, behind the page's words: its parts and how hazed. */
 export const FAR: Record<number, number> = { 19: 0.55, 20: 0.5, 21: 0.58, 22: 0.5 };
 /** The impossible triangle's parts: its three sides, and the corner that closes it. */
@@ -71,6 +72,14 @@ export interface World {
   spin: V3;
   /** Parts off in the distance, behind the page's words (not framed), and how hazed. */
   distant: Record<number, number>;
+  /** The one mechanism: a drawbridge in the left back walk, hanging into its gap until the wheel on
+   * the walk's side turns it up into place (it turns about its hinge; `open` is its turn hanging). */
+  bridge: { pivot: V3; open: number; knob: V3 };
+  /** The way across, once the bridge is up: from where the traveller rests by the twin towers, over
+   * the bridge, along the far walk to the seam — where, along the line of sight, the far walk meets
+   * the star on the pillar's crown — and on to the rune. The step at the seam is along the line of
+   * sight (no step at all on the screen); it is the only place she may cross between the two. */
+  crossing: V3[];
 }
 
 export function buildWorld(): World {
@@ -140,9 +149,10 @@ export function buildWorld(): World {
   }
 
   /* ── the side landings, and the back walks on their arcades, meeting behind the pillar ── */
-  const arcade = (u0: number, u1: number, top: number): [number, number][] => {
+  // The gap in the left back walk, which the drawbridge spans.
+  const G0 = 4.3, G1 = 6.3;
+  const arcade = (u0: number, u1: number, top: number, n = 2, pier = 0.8): [number, number][] => {
     const pts: [number, number][] = [[u0, top], [u0, -D]];
-    const n = 2, pier = 0.8;
     const span = (u1 - u0 - pier * (n + 1)) / n;
     for (let i = 0; i < n; i++) {
       const a = u0 + pier + i * (span + pier), b = a + span, r = span / 2, spring = top - 1.2 - r;
@@ -157,11 +167,15 @@ export function buildWorld(): World {
     return pts;
   };
   {
-    // left landing and back-left walk (x from 0 to W, z from N down to 0)
+    // left landing and back-left walk (x from 0 to W, z from N down to 0), broken by the gap the
+    // drawbridge spans
     m.box([0, -D, N - W], [W, HL, N], M.stone, P.backL);
-    m.extrude(arcade(W, N - W, HL), 'zy', 0.12, W - 0.12, M.stone, P.backL, true);
-    m.box([0, HL - 0.5, W], [W, HL, N - W], M.stone, P.backL);
-    m.box([0, HL - 0.04, 0], [W, HL, N], M.floor, P.backL);
+    m.extrude(arcade(W, G0, HL, 1, 0.55), 'zy', 0.12, W - 0.12, M.stone, P.backL, true);
+    m.extrude(arcade(G1, N - W, HL, 1, 0.5), 'zy', 0.12, W - 0.12, M.stone, P.backL, true);
+    m.box([0, HL - 0.5, W], [W, HL, G0], M.stone, P.backL);
+    m.box([0, HL - 0.5, G1], [W, HL, N - W], M.stone, P.backL);
+    m.box([0, HL - 0.04, 0], [W, HL, G0], M.floor, P.backL);
+    m.box([0, HL - 0.04, G1], [W, HL, N], M.floor, P.backL);
     k.band(0, N - W, W, N, HL - 0.55, 0.1, P.backL);
     k.windowZ(0.62, HL - 2.4, N, 0.46, 0.95, P.backL);
     base('z', N, 0, W, P.backL, 1);
@@ -262,6 +276,21 @@ export function buildWorld(): World {
     k.lantern([GX1 - 0.15, HL + 2.4, GZ1 + 0.5], 0.3, P.stairTower);
     m.box([GX1 - 0.2, HL + 2.38, GZ1 + 0.18], [GX1 - 0.1, HL + 2.44, GZ1 + 0.55], M.ink, P.stairTower);
     pivots[P.stairTower] = [(GX0 + GX1) / 2, 0, (GZ0 + GZ1) / 2];
+  }
+
+  /* ── the drawbridge, hinged at the gap's near edge, and the wheel that turns it ── */
+  {
+    m.box([0.06, HL - 0.42, G0 + 0.02], [W - 0.06, HL - 0.04, G1], M.stone, P.bridge);
+    m.box([0.06, HL - 0.04, G0 + 0.02], [W - 0.06, HL, G1], M.floor, P.bridge);
+    for (const x of [0.06, W - 0.2]) m.box([x, HL, G0 + 0.12], [x + 0.14, HL + 0.16, G1 - 0.06], M.trim, P.bridge);
+    k.inlayX(W - 0.06, HL - 0.25, G1 - 0.1, G1 - G0 - 0.3, 0.05, P.bridge);
+    pivots[P.bridge] = [W / 2, HL - 0.42, G1];
+  }
+  const knob: V3 = [W + 0.1, HL - 0.27, G1 + 0.62];
+  {
+    m.box([W, HL - 0.5, G1 + 0.3], [W + 0.08, HL - 0.04, G1 + 0.94], M.trim, P.knob);
+    k.wheel([W + 0.06, knob[1], knob[2]], 'x', 0.2, 6, M.roof, P.knob);
+    pivots[P.knob] = knob;
   }
 
   /* ── the crank on the front block (Activity) ── */
@@ -430,5 +459,9 @@ export function buildWorld(): World {
     tether: { from: [mid, HP + 0.02, mid], to: [mid, H, mid] },
     spin,
     distant: FAR,
+    bridge: { pivot: [W / 2, HL - 0.42, G1], open: -Math.PI / 2, knob },
+    // (the seam: z 4.0 on the far walk, clear of the star on the screen, and the point HP − HL on
+    // along the line of sight, just before the star's front notch)
+    crossing: [[0.85, HL, N - 2.2], [0.85, HL, G1 + 0.2], [0.85, HL, G0 - 0.2], [0.85, HL, 4.0], [0.85 + HP - HL, HP, 4.0 + HP - HL], [mid, HP, 6.15], [mid - 0.5, HP, mid + 0.9]],
   };
 }

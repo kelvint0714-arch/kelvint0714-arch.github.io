@@ -430,6 +430,102 @@ button {
   color: var(--ink-3);
 }
 
+/* The mechanism: a plainly named button (and the wheel itself, a hotspot over the building). */
+.mech {
+  position: fixed;
+  z-index: 9;
+  left: var(--mech-x, 66%);
+  bottom: 22px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+.mech-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: var(--ink);
+  font: 400 13px var(--sans);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: border-color 0.25s, color 0.25s, opacity 0.25s;
+}
+.mech-act:hover,
+.mech-act:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.mech-act:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.mech-icon {
+  font-style: normal;
+  font-size: 16px;
+  color: var(--accent);
+}
+.mech-act:disabled .mech-icon {
+  animation: mech-turn 1.2s linear infinite;
+}
+@keyframes mech-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.mech-note {
+  margin: 0;
+  font: italic 400 14px var(--serif);
+  color: var(--ink-3);
+}
+.mech-knob {
+  position: fixed;
+  z-index: 8;
+  left: 0;
+  top: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.25s, background 0.25s;
+}
+.mech-knob:hover,
+.mech-knob:focus-visible {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.mech-knob:disabled {
+  cursor: default;
+}
+[data-view='section'] .mech,
+[data-view='section'] .mech-knob,
+.observing .mech,
+.observing .mech-knob,
+.assembling .mech {
+  opacity: 0;
+  pointer-events: none;
+}
+.mech {
+  transition: opacity 0.6s var(--ease);
+}
+.stacked .mech {
+  position: static;
+  transform: none;
+  margin: 4px auto 18px;
+}
+
 .foot {
   position: fixed;
   z-index: 10;

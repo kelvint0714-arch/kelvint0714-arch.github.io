@@ -43,10 +43,10 @@ function inside(solids, pt) {
 const body = [];
 for (const y of [0.08, 0.3, 0.5, 0.68]) body.push([0, y, 0]);
 for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; for (const y of [0.12, 0.4]) body.push([Math.cos(a) * 0.13, y, Math.sin(a) * 0.13]); }
-function check(name, data, solids, path0, loop) {
+function check(name, data, solids, path0, loop, route = false) {
   // as the scene makes it ready: through a door from inside the wall, feet on what is under her
   let path = path0, skip = 0;
-  if (!loop) {
+  if (!loop && !route) {
     const [door, next] = [path[0], path[1]];
     const dx = door[0] - next[0], dz = door[2] - next[2], l = Math.hypot(dx, dz);
     const back = [dx / l, 0, dz / l];
@@ -56,18 +56,20 @@ function check(name, data, solids, path0, loop) {
   const hits = [];
   for (let d = skip; d <= total; d += 0.03) {
     const { p } = G.along(path, d, loop);
-    p[1] = G.heightAt(ys, d);
+    p[1] += G.heightAt(ys, d);
     for (const o of body) {
       const s = inside(solids, [p[0] + o[0], p[1] + o[1], p[2] + o[2]]);
       if (s) { hits.push(`d=${d.toFixed(2)} at [${p.map((v) => v.toFixed(2))}] body+${o[1]} in part ${s.part} [${s.min.map((v) => v.toFixed(2))}]–[${s.max.map((v) => v.toFixed(2))}]`); break; }
     }
   }
   const uniq = [...new Set(hits.map((h) => h.split(' in ')[1]))];
-  let minY = Infinity, maxY = -Infinity; for (const y of ys) { minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+  let minY = Infinity, maxY = -Infinity;
+  for (let d = 0; d <= total; d += 0.03) { const y = G.along(path, d, loop).p[1] + G.heightAt(ys, d); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
   console.log(name.padEnd(18), (skip ? 'door ' : '     ') + `y ${minY.toFixed(2)}..${maxY.toFixed(2)} `, hits.length ? `${hits.length} hits; first: ${hits[0]}; solids: ${uniq.slice(0, 4).join(' | ')}` : 'clear');
 }
 const w = buildWorld();
 for (const s of w.stations) check('hub:' + s.id, w.mesh, w.solids, s.walk);
+check('hub:crossing', w.mesh, w.solids, w.crossing, false, true);
 for (const r of buildRooms()) {
   check(r.id + ':walk', r.mesh, r.solids, r.walk);
   if (r.loop) check(r.id + ':loop', r.mesh, r.solids, r.loop, true);

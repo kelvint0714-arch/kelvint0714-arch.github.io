@@ -21,9 +21,15 @@ export function isJump(a: V3, b: V3) {
   return Math.hypot(dx, dz) < 1e-6 || (Math.abs(dx - dy) < 1e-6 && Math.abs(dy - dz) < 1e-6);
 }
 
-/** A walk's length, a jump on a loop counting as nothing. */
+/** A step along the line of sight: on the screen, no step at all (a registered seam). */
+export function isSight(a: V3, b: V3) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
+  return Math.abs(dx) > 1e-6 && Math.abs(dx - dy) < 1e-6 && Math.abs(dy - dz) < 1e-6;
+}
+
+/** A walk's length: a step along the line of sight takes no time, nor (on a loop) a straight drop. */
 export function segLen(a: V3, b: V3, loop = false) {
-  if (loop && isJump(a, b)) return 0;
+  if (isSight(a, b) || (loop && isJump(a, b))) return 0;
   return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
 }
 
@@ -82,7 +88,9 @@ function floorAt(tris: number[], x: number, z: number, y0: number, y1: number) {
   return best;
 }
 
-/** The height of her feet every TRACK_STEP along a path: on whatever is under her. */
+/** How far her feet are above (or below) the drawn path every TRACK_STEP along it: on whatever is
+ * under her. (Kept relative to the path, so at a step along the line of sight — where the path
+ * itself jumps — she jumps with it, exactly.) */
 export function groundTrack(data: Float32Array, path: V3[], loop = false): Float32Array {
   const tris = floorsNear(data, path);
   const total = pathLength(path, loop);
@@ -92,7 +100,7 @@ export function groundTrack(data: Float32Array, path: V3[], loop = false): Float
     const { p } = along(path, Math.min(total, i * TRACK_STEP), loop);
     let y = -Infinity;
     for (const [fx, fz] of FOOT) y = Math.max(y, floorAt(tris, p[0] + fx, p[2] + fz, p[1] - BELOW, p[1] + ABOVE));
-    raw[i] = y > -Infinity ? y : p[1];
+    raw[i] = y > -Infinity ? y - p[1] : 0;
   }
   // (a touch of smoothing: a step up is a quick lift, not a jolt)
   const ys = new Float32Array(n);
@@ -107,7 +115,7 @@ export function groundTrack(data: Float32Array, path: V3[], loop = false): Float
   return ys;
 }
 
-/** Her height `d` along a track. */
+/** Her feet over the path `d` along a track. */
 export function heightAt(ys: Float32Array, d: number) {
   const f = Math.max(0, d / TRACK_STEP);
   const i = Math.min(ys.length - 1, Math.floor(f));
