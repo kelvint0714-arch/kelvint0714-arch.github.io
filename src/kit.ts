@@ -462,11 +462,13 @@ export function place(data: number[], from: number, ax: number, az: number, ay: 
 const FIGURE_SCALE = 1.3;
 
 /** The traveller: built standing at the origin, facing +z, all one part (0). */
+/** The traveller: part 0 her body (cloak, head, hat), parts 1 and 2 her left and right foot (each
+ * moved on its own as she walks). */
 export function buildFigure(): Float32Array {
   const m = new Mesh();
   m.lathe([0, 0.09, 0], [[0.13, 0], [0.11, 0.12], [0.075, 0.28], [0.05, 0.36]], 10, M.white, 0);
-  m.box([-0.045, 0, -0.012], [-0.02, 0.1, 0.012], M.ink, 0);
-  m.box([0.02, 0, -0.012], [0.045, 0.1, 0.012], M.ink, 0);
+  m.box([-0.05, 0, -0.022], [-0.016, 0.1, 0.03], M.ink, 1);
+  m.box([0.016, 0, -0.022], [0.05, 0.1, 0.03], M.ink, 2);
   m.lathe([0, 0.44, 0], [[0.0001, -0.075], [0.06, -0.05], [0.075, 0], [0.06, 0.05], [0.0001, 0.075]], 8, M.ink, 0);
   // Her pointed white hat, swept back.
   const from = m.data.length;

@@ -65,6 +65,9 @@ app.innerHTML = `
         <a class="btn btn-solid" href="#research" data-go="research">Read the research <span aria-hidden="true">→</span></a>
         <a class="btn btn-quiet" href="#contact" data-go="contact">Say hello</a>
       </div>
+      <nav class="chapters" aria-label="Chapters">
+        ${SECTIONS.map((s) => `<a class="chapter" href="#${s.id}" data-go="${s.id}" data-id="${s.id}"><i>${s.no}</i> ${esc(s.title)}</a>`).join('')}
+      </nav>
     </section>
     <div class="valley-slot" aria-hidden="true"></div>
     <div class="mech" ${scene ? '' : 'hidden'}>
@@ -81,7 +84,7 @@ app.innerHTML = `
         </a>`,
       ).join('')}
     </nav>
-    <p class="hub-hint">Touch a glowing place, or press 1–${SECTIONS.length}</p>
+    <p class="hub-hint">${matchMedia('(pointer: coarse)').matches ? 'Tap a glowing place, or a name above' : `Point at a glowing place, or press 1–${SECTIONS.length}`}</p>
   </main>
 
   <svg class="leaders" aria-hidden="true">
@@ -167,12 +170,15 @@ observeButton.addEventListener('click', () => setObserving(!observing));
 function hubBox(w: number, h: number) {
   if (observing) return { x: w * 0.08, y: h * 0.08, w: w * 0.84, h: h * 0.86 };
   if (hubMode() === 'stacked') {
+    // (the canvas scrolls with the page here, so the slot is measured from the canvas, not the screen)
     const r = slot.getBoundingClientRect();
-    return { x: r.left + 8, y: r.top + 8, w: r.width - 16, h: r.height - 16 };
+    const c = canvas.getBoundingClientRect();
+    return { x: r.left - c.left + 8, y: r.top - c.top + 8, w: r.width - 16, h: r.height - 16 };
   }
-  // Clear of the text on the left, filling the rest of the screen (the labels hang over its edges).
+  // Clear of the text on the left, filling the rest of the screen above the wheel's button (the one
+  // label shown at a time hangs over its edges).
   const left = Math.max(hero.getBoundingClientRect().right, w * 0.34) + 60;
-  return { x: left, y: 64, w: w - left - 150, h: h - 84 };
+  return { x: left, y: 72, w: w - left - 90, h: h - 72 - 150 };
 }
 
 /** Where a section's own building sits, beside its panel. */
@@ -257,6 +263,8 @@ if (scene) {
   scene.onFrame = onFrame;
   scene.onMech = onMech;
   scene.refit(true);
+  // (on narrow screens the building can be scrolled out of sight: it rests till it is back)
+  new IntersectionObserver(([e]) => scene!.setAway(!e.isIntersecting)).observe(canvas);
   window.addEventListener('resize', () => {
     syncMode();
     scene.refit();
@@ -268,20 +276,28 @@ if (scene) {
 let hoverId: string | null = null;
 const setHot = (id: string | null) => {
   hoverId = id;
-  for (const el of [...labels, ...leaders, ...dots]) el.classList.toggle('hot', (el as HTMLElement).dataset.id === id);
+  for (const el of [...labels, ...leaders, ...dots, ...app.querySelectorAll<HTMLElement>('.chapter')]) el.classList.toggle('hot', (el as HTMLElement).dataset.id === id);
   scene?.setHot(id);
 };
 
 let returnFocus: HTMLElement | null = null;
+/** Where the overview was scrolled to when a section opened (narrow screens come back to it). */
+let hubScroll = 0;
 function go(id: string) {
   const active = document.activeElement;
   if (!current && active instanceof HTMLElement && active.matches('.station, [data-go]')) returnFocus = active;
   location.hash = id;
 }
 
+/** A pointer's place on the canvas (which, on narrow screens, scrolls with the page). */
+function onCanvas(e: MouseEvent): [number, number] {
+  const c = canvas.getBoundingClientRect();
+  return [e.clientX - c.left, e.clientY - c.top];
+}
+
 function hoverAt(e: PointerEvent) {
   if (observing || !scene || current) return;
-  const id = scene.pick(e.clientX, e.clientY);
+  const id = scene.pick(...onCanvas(e));
   if (id === hoverId) return;
   setHot(id);
   document.body.style.cursor = id ? 'pointer' : '';
@@ -296,7 +312,7 @@ canvas.addEventListener('click', (e) => {
     location.hash = '';
     return;
   }
-  const id = scene?.pick(e.clientX, e.clientY);
+  const id = scene?.pick(...onCanvas(e));
   if (id) go(id);
 });
 
@@ -318,6 +334,13 @@ app.querySelectorAll<HTMLAnchorElement>('[data-go]').forEach((a) => {
     e.preventDefault();
     go(a.dataset.go!);
   });
+});
+// The chapter list points out each chapter's place on the building as it is hovered or focused.
+app.querySelectorAll<HTMLAnchorElement>('.chapter').forEach((a) => {
+  a.addEventListener('pointerenter', () => setHot(a.dataset.id!));
+  a.addEventListener('pointerleave', () => setHot(null));
+  a.addEventListener('focus', () => setHot(a.dataset.id!));
+  a.addEventListener('blur', () => setHot(null));
 });
 $('.mark').addEventListener('click', () => observing && setObserving(false));
 
@@ -343,7 +366,15 @@ function route() {
   mounted = undefined;
   currentSub = sub;
   current = next;
+  // On narrow screens a section's world takes the top of the screen: the page goes back up to meet
+  // it (the overview, sinking, is drawn where the page starts), and comes back down on the way out.
+  const stacked = hubMode() === 'stacked';
+  if (next && !previous) {
+    hubScroll = window.scrollY;
+    if (stacked) window.scrollTo(0, 0);
+  }
   document.body.dataset.view = next ? 'section' : 'hub';
+  if (!next && previous && stacked) window.scrollTo(0, hubScroll);
   setHot(null);
   document.body.style.cursor = '';
   document.title = next ? `${next.title} · ${profile.name}` : `${profile.name} · A quiet valley`;

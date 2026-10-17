@@ -1,5 +1,7 @@
 // The valley's colours. The great building has two lights, following the system's light or dark
-// appearance: a warm sandy day, and a cool teal dusk with cyan glows. Each building behind a door is a
+// appearance, with its colours given by role (after the design guide): a pale mint sky; stone lit
+// cream on top, warm on the faces towards the light, cool lilac on those away; teal for roofs and
+// water; one warm accent for what can be turned. Dusk: the same roles under a blue sky. Each building behind a door is a
 // world of its own colours (after Monument Valley's levels), again by day and by dusk. Each material
 // has three tones: its top, the face turned left (towards the light) and the face turned right.
 
@@ -19,67 +21,67 @@ const flat = (c: string, extra: Partial<Material> = {}) => mat(c, c, c, extra);
 const EXTRA: Material[] = Array.from({ length: 11 }, () => flat('#888888'));
 // Inlaid lines and banners (after the materials above).
 // (then the shade in the backs of niches)
-const DAY_LAST: Material[] = [mat('#bfb4a2', '#9c9080', '#786d60'), mat('#d79a7b', '#c3826a', '#9e6655'), mat('#a89c8a', '#928672', '#706654', { mist: true })];
-const DUSK_LAST: Material[] = [mat('#bcc5c8', '#8b9aa2', '#57666f'), mat('#86d8e2', '#62bccb', '#4697a6'), mat('#93a3a9', '#73848c', '#4e5d64', { mist: true })];
+const DAY_LAST: Material[] = [mat('#d8b9ae', '#c99a8b', '#9a86a0'), mat('#c9806a', '#b46c57', '#93574a'), mat('#ecd2bf', '#d49f90', '#9d87a3', { mist: true })];
+const DUSK_LAST: Material[] = [mat('#a9a6a6', '#867c8e', '#5a6079'), mat('#e3be94', '#cfa77d', '#a8845f'), mat('#adaba5', '#857a8e', '#575c75', { mist: true })];
 
 // Order matches M in src/kit.ts.
 export const DAY: Palette = {
-  skyIn: hex('#f8f0dd'),
-  skyOut: hex('#cdc8c0'),
+  skyIn: hex('#f4f8f4'),
+  skyOut: hex('#d6e4dd'),
   skyAt: [0.6, 0.38],
   skyR: 0.95,
-  glow: hex('#fff1c9'),
-  dust: hex('#fffaf0'),
+  glow: hex('#fff3d6'),
+  dust: hex('#ffffff'),
   fog: [-7.5, -1.5],
   mats: [
-    /* stone   */ mat('#cfc5b4', '#ab9f8d', '#857a6c', { tiles: true, mist: true }),
-    /* trim    */ mat('#d9d0bf', '#b8ac9a', '#8f8475', { mist: true }),
-    /* hole    */ mat('#514942', '#4a433d', '#3f3934'),
-    /* dome    */ mat('#6a625b', '#544d47', '#3f3a35'),
-    /* glow    */ flat('#fff4d4'),
-    /* white   */ mat('#ffffff', '#f6f3ee', '#dcd7cf'),
-    /* ink     */ flat('#2f2a26'),
-    /* wood    */ mat('#8c8073', '#7c7064', '#62584e'),
-    /* penrose */ mat('#f5eee2', '#d8ccb8', '#a99881'),
-    /* iron    */ mat('#5a534c', '#4b4540', '#3a3531'),
-    /* floor   */ mat('#d8cfbf', '#b5aa98', '#8d8273', { tiles: true }),
-    /* leaf    */ mat('#aab48f', '#8d9874', '#6c7657'),
-    /* lamp    */ flat('#ffe1a0'),
+    /* stone   */ mat('#fff0d7', '#eab1a1', '#b29bb4', { tiles: true, mist: true }),
+    /* trim    */ mat('#fff6e6', '#f2c4b6', '#c2aec4', { mist: true }),
+    /* hole    */ mat('#6c5a74', '#62506a', '#56465e'),
+    /* dome    */ mat('#71a8a4', '#5b918d', '#467a77'),
+    /* glow    */ flat('#fff6dc'),
+    /* white   */ mat('#ffffff', '#f7efe9', '#ddd0dd'),
+    /* ink     */ flat('#334a50'),
+    /* wood    */ mat('#a98ea8', '#957a95', '#7c657e'),
+    /* penrose */ mat('#fffaf0', '#f3d6cb', '#c8b8cb'),
+    /* iron    */ mat('#c27c66', '#ab6b56', '#8c5645'),
+    /* floor   */ mat('#fff3df', '#edb9aa', '#b8a2bb', { tiles: true }),
+    /* leaf    */ mat('#a3cdb0', '#86b596', '#6a9b7d'),
+    /* lamp    */ flat('#ffe7b0'),
     ...EXTRA,
     ...DAY_LAST,
   ],
 };
 
 export const DUSK: Palette = {
-  skyIn: hex('#3f565f'),
-  skyOut: hex('#141d21'),
+  skyIn: hex('#2d3f50'),
+  skyOut: hex('#141d27'),
   skyAt: [0.6, 0.36],
   skyR: 0.9,
-  glow: hex('#8ff2ff'),
-  dust: hex('#c6f7ff'),
+  glow: hex('#ffe2b0'),
+  dust: hex('#f3e6d6'),
   fog: [-7.5, -0.5],
   mats: [
-    /* stone   */ mat('#d3d9da', '#9fadb3', '#66767f', { tiles: true, mist: true }),
-    /* trim    */ mat('#e0e5e6', '#b0bcc1', '#76858d', { mist: true }),
-    /* hole    */ mat('#1f272c', '#1b2227', '#161c20'),
-    /* dome    */ mat('#3b474e', '#2f3a41', '#232c32'),
-    /* glow    */ flat('#a8f6ff'),
-    /* white   */ mat('#ffffff', '#eef4f5', '#cfd9dc'),
-    /* ink     */ flat('#192024'),
-    /* wood    */ mat('#7f878b', '#6c7479', '#545c61'),
-    /* penrose */ mat('#fbfdfd', '#ccd8dc', '#8798a0'),
-    /* iron    */ mat('#2b343a', '#232b30', '#1b2227'),
-    /* floor   */ mat('#dce1e2', '#a9b6bb', '#6e7e86', { tiles: true }),
-    /* leaf    */ mat('#7fa59f', '#5f847f', '#43625e'),
+    /* stone   */ mat('#c7c7c0', '#9f92a6', '#6e748e', { tiles: true, mist: true }),
+    /* trim    */ mat('#d4d3cc', '#ab9fb2', '#7b8198', { mist: true }),
+    /* hole    */ mat('#1e2733', '#1a222d', '#151c25'),
+    /* dome    */ mat('#73aaa7', '#5c918e', '#467674'),
+    /* glow    */ flat('#ffe6b8'),
+    /* white   */ mat('#f4f1ec', '#d8d0d6', '#a9a8b8'),
+    /* ink     */ flat('#141c26'),
+    /* wood    */ mat('#8c8296', '#776e82', '#5f586b'),
+    /* penrose */ mat('#e8e7e2', '#b8adbe', '#868ba3'),
+    /* iron    */ mat('#e3be94', '#cfa77d', '#a8845f'),
+    /* floor   */ mat('#cdccc5', '#a497ab', '#727892', { tiles: true }),
+    /* leaf    */ mat('#7da695', '#638c7c', '#4a7063'),
     /* lamp    */ flat('#ffd98c'),
     ...EXTRA,
     ...DUSK_LAST,
   ],
 };
 
-// The great building's domes: terracotta by day, cyan by dusk.
-DAY.mats[M.roof] = mat('#dca07f', '#c78366', '#9f644d');
-DUSK.mats[M.roof] = mat('#8fdbe3', '#68bfcb', '#4a98a5');
+// The great building's domes and roofs: teal, by day and by dusk.
+DAY.mats[M.roof] = mat('#7fb6b1', '#669d99', '#4f8481');
+DUSK.mats[M.roof] = mat('#7fb6b2', '#669b98', '#4d7e7b');
 
 const lerp = (a: RGB, b: RGB, t: number): RGB => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 

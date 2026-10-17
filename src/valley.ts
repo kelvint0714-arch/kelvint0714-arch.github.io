@@ -220,6 +220,7 @@ export class Valley {
   private raf = 0;
   private clock = 0;
   private last = 0;
+  private away = false;
   private reduced: boolean;
 
   // What stands (and what is sinking), and what comes next.
@@ -270,6 +271,11 @@ export class Valley {
   // The traveller.
   private fig: V3 = [0, 0, 0];
   private figYaw = 0.6;
+  /** The way she is turning to (she turns towards it, never snapping round), how far she has walked
+   * (her steps follow it), and how much she is striding (settling to a stand when she stops). */
+  private figYawTo = 0.6;
+  private figWalked = 0;
+  private figStride = 0;
   private figAlpha = 1;
   private walk: Walk | null = null;
   private figShowAt = -1;
@@ -296,7 +302,7 @@ export class Valley {
       this.roomDefs.set(room.id, this.define(room.id, room.mesh, this.r.model(room.mesh, room.culledFrom), room.parts, room.pivots, natural(room.assembly, room.mesh, room.solids, fog), room, room.distant));
     }
     this.figLayer = { model: this.r.model(buildFigure()), parts: new Float32Array(MAX_PARTS * 16), partFx: new Float32Array(MAX_PARTS * 4) };
-    this.figLayer.partFx[3] = NO_FLOOR;
+    for (let i = 0; i < 3; i++) this.figLayer.partFx[i * 4 + 3] = NO_FLOOR;
     this.stage = this.spawn(this.hubDef, -1000, 1);
     this.restAt(this.hubDef, this.station('about')!.walk);
     for (const s of this.world.stations) this.hotLevel.set(s.id, 0);
@@ -424,6 +430,16 @@ export class Valley {
     this.darkTo = dark ? 1 : 0;
     if (this.reduced) this.dark = this.darkTo;
     this.kick();
+  }
+
+  /** Scrolled off the screen (narrow screens): stop drawing until it comes back. */
+  setAway(away: boolean) {
+    if (away === this.away) return;
+    this.away = away;
+    if (!away) {
+      this.last = 0;
+      this.kick();
+    }
   }
 
   setReducedMotion(reduced: boolean) {
@@ -777,7 +793,8 @@ export class Valley {
     p[1] += heightAt(ys, Math.min(d, total));
     this.fig = p;
     const a = path[seg], b = path[seg + 1];
-    if (Math.hypot(b[0] - a[0], b[2] - a[2]) > 0.01 && !isJump(a, b)) this.figYaw = Math.atan2(b[0] - a[0], b[2] - a[2]);
+    if (Math.hypot(b[0] - a[0], b[2] - a[2]) > 0.01 && !isJump(a, b)) this.figYawTo = Math.atan2(b[0] - a[0], b[2] - a[2]);
+    this.figWalked = d + (loop ? Math.floor((t - t0) * speed / total) * total : 0);
     if (!loop && d >= total) {
       // Some rooms she goes on walking in.
       const room = this.stage.def.room;
@@ -801,7 +818,6 @@ export class Valley {
     const t = this.clock;
     const bob = (amp: number, period: number, phase: number) => Math.sin((t / period) * Math.PI * 2 + phase) * amp;
     if (part === P.pavilion) return { off: [0, bob(0.16, 7.5, 1.7), 0] };
-    if (part === P.isles) return { off: [0, bob(0.12, 5.5, 0.6), 0] };
     if (part === P.crankWheel) return { rz: -(this.hotLevel.get('activity') ?? 0) * 0.5 };
     return {};
   }
@@ -986,10 +1002,19 @@ export class Valley {
     });
   }
 
-  /** Her place this frame; returns how much of her shows. */
-  private figureMatrix(): number {
-    const walking = this.walk && this.clock > this.walk.t0;
-    const bobY = walking && !this.reduced ? Math.abs(Math.sin(this.clock * 9)) * 0.035 : 0;
+  /** Her place this frame, and her feet; returns how much of her shows. */
+  private figureMatrix(dt: number): number {
+    const walking = !!this.walk && this.clock > this.walk.t0;
+    // Turning towards where she is going, by the shorter way round, at a walker's pace.
+    let dyaw = this.figYawTo - this.figYaw;
+    dyaw = ((dyaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    this.figYaw += this.reduced ? dyaw : Math.sign(dyaw) * Math.min(Math.abs(dyaw), dt * 7);
+    // Her steps follow the distance walked: a stride 0.36 long, each foot in turn lifted a little and
+    // brought forward; her body rises a little on each step. Stopping, she settles onto both feet.
+    this.figStride = walking && !this.reduced ? Math.min(1, this.figStride + dt * 5) : Math.max(0, this.figStride - dt * 4);
+    const phase = (this.figWalked / 0.36) * Math.PI * 2;
+    const amp = this.figStride;
+    const bobY = amp * Math.abs(Math.sin(phase)) * 0.028;
     // On the overview she rides the pavilion when she stands on it.
     let lift: V3 = [0, 0, 0];
     const st = this.figStage;
@@ -1000,17 +1025,29 @@ export class Valley {
     }
     // She goes down with the building she stands in.
     let alpha = this.figAlpha;
-    this.figLayer.partFx[3] = NO_FLOOR;
+    let floor = NO_FLOOR;
     if (st && st.dies < Infinity) {
       const k = clamp01((this.clock - st.dies) / SINK);
       lift[1] -= st.def.sink.depth * easeInQuart(k);
-      this.figLayer.partFx[3] = st.def.sink.floor;
+      floor = st.def.sink.floor;
       if (k >= 1) alpha = 0;
     }
     const c = Math.cos(this.figYaw), s = Math.sin(this.figYaw);
     const f = this.fig;
-    this.figLayer.parts.set([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, f[0] + lift[0], f[1] + bobY + lift[1], f[2] + lift[2], 1], 0);
-    this.figLayer.partFx[0] = alpha;
+    const at = (fwd: number, up: number, body: number): number[] => [
+      c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0,
+      f[0] + lift[0] + s * fwd, f[1] + lift[1] + up + body, f[2] + lift[2] + c * fwd, 1,
+    ];
+    this.figLayer.parts.set(at(0, bobY, 0), 0);
+    for (const [i, off] of [[1, 0], [2, Math.PI]] as [number, number][]) {
+      const p = phase + off;
+      // forward and back as it swings; lifted only while it swings forward
+      this.figLayer.parts.set(at(amp * Math.sin(p) * 0.075, amp * Math.max(0, Math.cos(p)) * 0.035, 0), i * 16);
+    }
+    for (let i = 0; i < 3; i++) {
+      this.figLayer.partFx[i * 4] = alpha;
+      this.figLayer.partFx[i * 4 + 3] = floor;
+    }
     return alpha;
   }
 
@@ -1148,7 +1185,7 @@ export class Valley {
     const sk = this.skyFrom && !this.reduced ? ease(clamp01((this.clock - this.skyT0) / 1.3)) : 1;
     if (sk < 1) busy = true;
     this.skyNow = sk >= 1 ? skyTo : skyMix(this.skyFrom!, skyTo, sk);
-    if (this.figAlpha > 0.003 && this.figureMatrix() > 0.003) layers.push(this.figLayer);
+    if (this.figAlpha > 0.003 && this.figureMatrix(dt) > 0.003) layers.push(this.figLayer);
     let view = this.view();
     if (this.intro) {
       for (const p of this.openingClouds(this.skyNow ?? blend(this.dark))) puffs.push(p);
@@ -1181,7 +1218,7 @@ export class Valley {
     });
     this.onFrame?.(this.anchors());
     this.sendMech();
-    if (busy) this.kick();
+    if (busy && !this.away) this.kick();
   };
 }
 

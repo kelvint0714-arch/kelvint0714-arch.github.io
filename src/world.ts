@@ -41,7 +41,7 @@ export const P = {
 } as const;
 export const PART_COUNT = 24;
 /** The far city, behind the page's words: its parts and how hazed. */
-export const FAR: Record<number, number> = { 19: 0.55, 20: 0.5, 21: 0.58, 22: 0.5 };
+export const FAR: Record<number, number> = { 19: 0.8, 20: 0.78, 21: 0.82, 22: 0.8 };
 /** The impossible triangle's parts: its three sides, and the corner that closes it. */
 export const PENROSE: number[] = [P.penrose, P.penB, P.penC, P.penK];
 
@@ -289,7 +289,7 @@ export function buildWorld(): World {
   const knob: V3 = [W + 0.1, HL - 0.27, G1 + 0.62];
   {
     m.box([W, HL - 0.5, G1 + 0.3], [W + 0.08, HL - 0.04, G1 + 0.94], M.trim, P.knob);
-    k.wheel([W + 0.06, knob[1], knob[2]], 'x', 0.2, 6, M.roof, P.knob);
+    k.wheel([W + 0.06, knob[1], knob[2]], 'x', 0.2, 6, M.iron, P.knob);
     pivots[P.knob] = knob;
   }
 
@@ -325,18 +325,12 @@ export function buildWorld(): World {
   }
   k.cornice(PC[0] - 1.0, PC[2] - 1.0, PC[0] + 1.0, PC[2] + 1.0, PC[1] + 2.1, P.pavilion, 0.12);
   k.drumDome([PC[0], PC[1] + 2.4, PC[2]], 0.52, 0.42, P.pavilion);
-  for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.pinnacle([PC[0] + dx * 0.9, PC[1] + 2.4, PC[2] + dz * 0.9], 0.15, P.pavilion);
   m.box([PC[0] - 0.02, PC[1] + 1.45, PC[2] - 0.02], [PC[0] + 0.02, PC[1] + 2.1, PC[2] + 0.02], M.ink, P.pavilion);
   m.lathe([PC[0], PC[1] + 1.05, PC[2]], [[0.0001, 0], [0.16, 0.12], [0.16, 0.3], [0.0001, 0.42]], 6, M.glow, P.pavilion);
   k.keel([PC[0], PC[1] - 0.35, PC[2]], 0.72, 1.0, P.pavilion);
   pivots[P.pavilion] = PC;
 
-  /* ── small stones drifting about ── */
-  for (const [c, s] of [[[-6.2, 1.0, 12.0], 0.5], [[15.6, 9.0, -1.0], 0.42], [[-3.0, 14.6, 2.0], 0.36], [[6.0, -4.0, 16.6], 0.34], [[19.0, 4.0, 3.0], 0.3]] as [V3, number][]) {
-    m.box([c[0] - s, c[1] - s * 0.4, c[2] - s], [c[0] + s, c[1] + s * 0.4, c[2] + s], M.stone, P.isles);
-    k.keel([c[0], c[1] - s * 0.4, c[2]], s * 0.8, s * 1.4, P.isles);
-  }
-  pivots[P.isles] = [5, 3, 5];
+  // (no stones drifting about: one building, one path, one mechanism)
 
   /* ── the impossible triangle, high over the star ── */
   // Three beams along x, then y, then z: the way back to the start is (L, L, L), straight down the
@@ -440,12 +434,6 @@ export function buildWorld(): World {
     function steps(x: number, y: number, z: number) {
       for (let i = 0; i < 6; i++) m.box([x, y, z - 0.5], [x + 1.6 - i * 0.27, y + (i + 1) * 0.45, z + 0.5], M.floor, P.farShrine);
     }
-  }
-  for (const [sx, sy, y, r] of [[-16.5, -9.6, 2, 1.5], [-14.6, 12.4, -4, 1.3]]) {
-    const c = seen(sx, sy, y);
-    islet(m, c, r, P.farIsles, sx + sy);
-    k.round(c, r * 0.42, r * 0.7, M.stone, P.farIsles);
-    k.cupola([c[0], c[1] + r * 0.7, c[2]], r * 0.48, M.dome, P.farIsles);
   }
   pivots[P.farIsles] = seen(-22, -2, 0);
 

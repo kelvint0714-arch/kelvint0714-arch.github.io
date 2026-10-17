@@ -1,4 +1,5 @@
-/* A quiet valley — Monument Valley's light: warm sand by day, teal dusk by night.
+/* A quiet valley — colours by role (after the design guide): a pale mint day, a blue dusk; ink apart
+   from the stone; one warm accent for what can be acted on.
    Two faces: Jost (light, widely spaced, for everything small) and Cormorant Garamond (titles). */
 
 :root {
@@ -7,46 +8,46 @@
   --serif: 'Cormorant Garamond', 'Iowan Old Style', Georgia, serif;
   --ease: cubic-bezier(0.22, 0.7, 0.2, 1);
 
-  --bg: #efe7d8;
-  --ink: #3b352f;
-  --ink-2: #776d62;
-  --ink-3: #a3988a;
-  --line: rgba(59, 53, 47, 0.16);
-  --line-2: rgba(59, 53, 47, 0.32);
-  --accent: #a46f45;
-  --accent-soft: rgba(164, 111, 69, 0.12);
-  --glow: #fff1c9;
-  --panel: rgba(250, 246, 238, 0.6);
-  --panel-edge: rgba(255, 255, 255, 0.7);
-  --shadow: 0 40px 90px -50px rgba(90, 64, 40, 0.45);
-  --solid-ink: #f7f1e6;
-  --heat-0: rgba(59, 53, 47, 0.07);
-  --heat-1: #ecdcc5;
-  --heat-2: #d9b58e;
-  --heat-3: #bb875c;
-  --heat-4: #8a5c38;
+  --bg: #e8f0eb;
+  --ink: #334a50;
+  --ink-2: #55686d;
+  --ink-3: #5b6d72;
+  --line: rgba(51, 74, 80, 0.16);
+  --line-2: rgba(51, 74, 80, 0.32);
+  --accent: #9b5e4a;
+  --accent-soft: rgba(171, 107, 86, 0.12);
+  --glow: #fff3d6;
+  --panel: rgba(244, 248, 245, 0.62);
+  --panel-edge: rgba(255, 255, 255, 0.72);
+  --shadow: 0 40px 90px -50px rgba(51, 74, 80, 0.4);
+  --solid-ink: #f6f8f5;
+  --heat-0: rgba(51, 74, 80, 0.07);
+  --heat-1: #f1d9cf;
+  --heat-2: #ddb0a0;
+  --heat-3: #c08772;
+  --heat-4: #8f5644;
   color-scheme: light;
 }
 
 :root[data-theme='dark'] {
-  --bg: #1b252a;
-  --ink: #e6eef0;
-  --ink-2: #a3b5bb;
-  --ink-3: #66787f;
-  --line: rgba(200, 232, 238, 0.14);
-  --line-2: rgba(200, 232, 238, 0.3);
-  --accent: #8ff2ff;
-  --accent-soft: rgba(143, 242, 255, 0.1);
-  --glow: #8ff2ff;
-  --panel: rgba(22, 32, 37, 0.58);
-  --panel-edge: rgba(160, 220, 230, 0.13);
+  --bg: #202e3b;
+  --ink: #f0ebe4;
+  --ink-2: #bcb7bb;
+  --ink-3: #9aa0ad;
+  --line: rgba(240, 235, 228, 0.14);
+  --line-2: rgba(240, 235, 228, 0.3);
+  --accent: #e3be94;
+  --accent-soft: rgba(227, 190, 148, 0.12);
+  --glow: #ffe6b8;
+  --panel: rgba(28, 40, 52, 0.6);
+  --panel-edge: rgba(240, 225, 205, 0.14);
   --shadow: 0 40px 100px -40px rgba(0, 0, 0, 0.7);
-  --solid-ink: #12191d;
+  --solid-ink: #182330;
   --heat-0: rgba(255, 255, 255, 0.06);
-  --heat-1: #23464c;
-  --heat-2: #2c7884;
-  --heat-3: #4bb6c3;
-  --heat-4: #9df3ff;
+  --heat-1: #4a4238;
+  --heat-2: #7d6650;
+  --heat-3: #b8946c;
+  --heat-4: #e9c79d;
   color-scheme: dark;
 }
 
@@ -113,8 +114,20 @@ button {
   inset: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   display: block;
   touch-action: manipulation;
+}
+/* On narrow screens the building sits in the page, above the text: it scrolls away with it. (A
+   section's world, and the building watched on its own, stay put on the screen.) */
+.stacked body:not(.observing):not([data-view='section']) #scene,
+.stacked body:not(.observing):not([data-view='section']) .leaders {
+  position: absolute;
+}
+/* (its sky thins into the page below it, without an edge) */
+.stacked body:not(.observing):not([data-view='section']) #scene {
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 200px), transparent);
+  mask-image: linear-gradient(#000 calc(100% - 200px), transparent);
 }
 
 /* Without WebGL: the day or dusk sky in CSS, and the list of sections. */
@@ -292,6 +305,41 @@ button {
   margin-top: 40px;
 }
 
+/* Every chapter, from the first frame (the labels on the building show only the one pointed at). */
+.chapters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 18px;
+  margin-top: 30px;
+  max-width: 520px;
+}
+.chapter {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  min-height: 44px;
+  padding: 10px 0;
+  font: 500 19px var(--serif);
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 0.25s, border-color 0.25s;
+}
+.chapter i {
+  font: normal 400 10.5px var(--sans);
+  letter-spacing: 0.18em;
+  color: var(--ink-3);
+}
+.chapter:hover,
+.chapter:focus-visible,
+.chapter.hot {
+  color: var(--accent);
+  border-bottom-color: currentColor;
+}
+.stacked .chapters {
+  display: none;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -390,12 +438,31 @@ button {
 .station.hot .station-t b {
   color: var(--accent);
 }
+/* On wide screens a label shows only while its place (or its chapter) is pointed at: nothing else
+   hangs over the building, its path or its bridge. */
+html:not(.stacked) .station {
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.25s, visibility 0s 0.25s;
+}
+html:not(.stacked) .station.hot {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 0.25s;
+}
+html:not(.stacked) .leaders line:not(.hot) {
+  opacity: 0;
+}
+html:not(.stacked) .leaders line {
+  transition: opacity 0.25s, stroke 0.3s;
+}
 
 .leaders {
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   z-index: 9;
   pointer-events: none;
   overflow: visible;
@@ -435,7 +502,7 @@ button {
   position: fixed;
   z-index: 9;
   left: var(--mech-x, 66%);
-  bottom: 22px;
+  bottom: 60px;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
