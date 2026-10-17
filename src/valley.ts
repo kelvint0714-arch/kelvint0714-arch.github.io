@@ -730,29 +730,38 @@ export class Valley {
    * The light between the tall tower's rune and the impossible triangle over it: it rises once the
    * triangle has closed, breathes with it, and brightens when Research (the rune) is pointed at.
    */
-  private tether(st: Stage, weight: number): { beam: Beam; glow: Glow } | null {
-    const list = this.intro && st.def.intro ? st.def.intro : st.def.assembly;
-    const corner = list.find((a) => a.part === P.penK);
+  private tether(st: Stage, weight: number): { beam: Beam; glows: Glow[] } | null {
+    // Only once the building stands complete: the rune kindles, then the light climbs from it to
+    // the triangle, and where it reaches the triangle a soft flare opens and settles.
+    const built = this.builtAt(st);
     const age = (this.clock - st.born) * st.pace;
-    const on = corner ? clamp01((age - corner.at - corner.dur * 0.5) / 0.9) : 1;
-    if (on * weight <= 0.004) return null;
+    const since = (age - built) / (this.intro ? 1 : st.pace);
+    const kindle = easeOut(clamp01((since - 0.1) / 0.6));
+    const reach = ease(clamp01((since - 0.45) / 1.4));
+    if (kindle * weight <= 0.004) return null;
     const t = this.reduced ? 0 : this.clock;
     const hot = this.hotLevel.get('research') ?? 0;
-    // (in the opening the beam's first light flares, then settles)
-    const flare = this.intro ? Math.sin(Math.PI * clamp01((age - (corner?.at ?? 0)) / 1.4)) * 0.5 : 0;
-    const a = (0.34 + 0.06 * this.dark + 0.35 * hot + flare) * (0.82 + 0.18 * Math.sin(t * 1.6 + 1.5)) * easeOut(on) * weight;
+    const breath = 0.84 + 0.16 * Math.sin(t * 1.6 + 1.5);
+    const color = blend(this.dark).glow;
     const from = this.world.tether.from;
-    // (it rises from the rune to the triangle, rather than appearing whole)
     const top = this.lifted(this.world.tether.to, P.penrose);
-    const reach = easeOut(on);
     const to: V3 = [from[0] + (top[0] - from[0]) * reach, from[1] + (top[1] - from[1]) * reach, from[2] + (top[2] - from[2]) * reach];
     const side: V3 = [Math.SQRT1_2, 0, -Math.SQRT1_2];
     const at = (p: V3, w: number, s: number): V3 => [p[0] + side[0] * w * s, p[1], p[2] + side[2] * w * s];
-    const color = blend(this.dark).glow;
+    const a = (0.26 + 0.06 * this.dark + 0.32 * hot) * breath * weight;
+    const flare = Math.sin(Math.PI * clamp01((since - 1.6) / 1.3));
+    const glows: Glow[] = [{ at: from, r: (0.5 + 0.5 * kindle) * (1.0 + 0.35 * hot), a: a * 0.75 * kindle, color }];
+    if (flare > 0.01) glows.push({ at: top, r: 1.6 * flare, a: a * 0.6 * flare, color });
     return {
-      beam: { quad: [at(from, 0.62, -1), at(from, 0.62, 1), at(to, 0.42, 1), at(to, 0.42, -1)], color, a: a * 0.9 },
-      glow: { at: from, r: 1.1 + 0.4 * hot, a: a * 0.7, color },
+      beam: { quad: [at(from, 0.5, -1), at(from, 0.5, 1), at(to, 0.5 + 0.2 * reach, 1), at(to, 0.5 + 0.2 * reach, -1)], color, a: a * Math.min(1, reach * 2.5) },
+      glows,
     };
+  }
+
+  /** When a building stands complete (on its own clock; what stands off in the distance aside). */
+  private builtAt(st: Stage) {
+    const list = this.intro && st.def.intro ? st.def.intro : st.def.assembly;
+    return Math.max(0, ...list.filter((a) => !(a.part in st.def.distant)).map((a) => a.at + a.dur));
   }
 
   /** The opening's turn of the world (0 once it has settled). */
@@ -872,8 +881,7 @@ export class Valley {
     const pulse = (k: number) => (this.reduced ? 1 : 0.85 + 0.15 * Math.sin(t * 1.6 + k));
     const age = (this.clock - st.born) * st.pace;
     // Lights come on once the building stands, each opening out from its source.
-    const list = this.intro && st.def.intro ? st.def.intro : st.def.assembly;
-    const built = Math.max(...list.map((a) => a.at + a.dur));
+    const built = this.builtAt(st);
     if (st.def.room) {
       const on = clamp01((age - built + 0.1) / 0.8);
       const pal = st.layer.pal ?? st.def.pal(dusk);
@@ -980,7 +988,7 @@ export class Valley {
         const tie = this.tether(st, fading);
         if (tie) {
           beams.push(tie.beam);
-          glows.push(tie.glow);
+          glows.push(...tie.glows);
         }
       }
       const room = st.def.room;

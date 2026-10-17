@@ -285,7 +285,8 @@ void main() {
   }
 }`;
 
-// Beams of light: quads in the world, bright at their source and fading out, soft at their sides.
+// Beams of light: quads in the world, set in it (what stands in front of a beam hides it), bright at
+// their source and fading out: a soft core in a fainter halo, motes of light drifting along them.
 const BEAM_VS = /* glsl */ `#version 300 es
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec2 aUv;
@@ -298,18 +299,22 @@ void main() {
   vUv = aUv;
   vColor = aColor;
   gl_Position = clipOf(aPos, uRes);
-  gl_Position.z = -1.0;
 }`;
 
 const BEAM_FS = /* glsl */ `#version 300 es
 precision mediump float;
 in vec2 vUv;
 in vec4 vColor;
+uniform float uTime;
 out vec4 outColor;
 void main() {
-  float side = smoothstep(0.0, 0.18, vUv.x) * smoothstep(1.0, 0.82, vUv.x);
-  float along = pow(1.0 - vUv.y, 1.6);
-  float a = side * along * vColor.a;
+  float x = (vUv.x - 0.5) / 0.5;
+  float core = exp(-x * x * 9.0), halo = exp(-x * x * 2.2) * (1.0 - smoothstep(0.9, 1.0, abs(x)));
+  // easing in at its source, fading out towards its far end
+  float along = smoothstep(0.0, 0.07, vUv.y) * pow(1.0 - vUv.y, 1.25);
+  // motes of light drifting along it
+  float drift = 0.88 + 0.12 * sin(vUv.y * 22.0 - uTime * 1.7 + sin(vUv.x * 9.0 + uTime * 0.6) * 1.5);
+  float a = (core * 0.75 + halo * 0.35) * along * drift * vColor.a;
   outColor = vec4(vColor.rgb * a, 0.0);
 }`;
 
@@ -570,10 +575,10 @@ export class Renderer {
       gl.disable(gl.BLEND);
       gl.depthMask(true);
     }
-    gl.disable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);
 
-    // Beams of light, added on.
+    // Beams of light, added on, set in the scene: what stands in front of one hides it.
+    gl.depthMask(false);
     const beams = (o.beams ?? []).filter((b) => b.a > 0.004);
     if (beams.length) {
       const v = new Float32Array(beams.length * 6 * this.beam.floats);
@@ -592,9 +597,12 @@ export class Renderer {
       this.common(this.beamP, w, h, dpr, view, pal);
       gl.bindVertexArray(this.beam.vao);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.beam.buf);
+      gl.uniform1f(this.beamP.u('uTime'), o.time);
       gl.bufferData(gl.ARRAY_BUFFER, v, gl.DYNAMIC_DRAW);
       gl.drawArrays(gl.TRIANGLES, 0, beams.length * 6);
     }
+    gl.depthMask(true);
+    gl.disable(gl.DEPTH_TEST);
 
     // Halos (added on), then clouds (laid over).
     const discs = (list: { at: V3; r: number; a: number; color: RGB }[], cloud: boolean) => {
