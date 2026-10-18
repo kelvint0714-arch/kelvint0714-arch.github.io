@@ -1,17 +1,17 @@
 // The valley scene. On the overview stands the great building; each section is behind one of its
-// doors. Opening a section, the camera leans in towards that door while the building sinks into the
-// mist; the section's own building assembles out of it and the traveller steps out of its door.
-// Coming back, the same the other way. Also: hover light, floating pieces breathing, the light
-// following the system's appearance, and the quiet intro in which the great building first assembles.
+// doors. Opening a section, the camera leans in towards that door while the mist gathers over the
+// building; when the mist parts, the section's own world stands there whole and the traveller steps
+// out of its door. Coming back, the same the other way. Nothing is built before the eye: every world
+// comes and goes in the mist. Also: hover light, floating pieces breathing, the light following the
+// system's appearance, and the opening, in which the mist parts from the great building as it turns.
 
 import type { V3 } from './geometry';
 import { along, groundTrack, heightAt, isJump, pathLength, wallBehind } from './ground';
 import { buildFigure } from './kit';
 import { blend, roomPalette, skyMix } from './palettes';
-import { MAX_PARTS, project, Renderer, type Beam, type Glow, type Layer, type Model, type Palette, type Puff, type View } from './renderer';
-import { buildRooms, type Assembly, type Pose, type Room } from './rooms';
+import { MAX_PARTS, project, Renderer, unproject, type Beam, type Glow, type Layer, type Model, type Palette, type Puff, type RGB, type View } from './renderer';
+import { buildRooms, type Pose, type Room } from './rooms';
 import { buildWorld, P, PART_COUNT, PENROSE, type World } from './world';
-import type { Solid } from './geometry';
 
 export interface Anchor {
   id: string;
@@ -47,89 +47,25 @@ export interface ValleyOptions {
 
 const ease = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const easeOut = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.pow(1 - t, 3));
-const easeInQuart = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * t * t);
-/** Settles with a small overshoot: the click of a piece falling into place. */
-const easeBack = (t: number) => {
-  if (t <= 0) return 0;
-  if (t >= 1) return 1;
-  return 1 + 2.5 * Math.pow(t - 1, 3) + 1.5 * Math.pow(t - 1, 2);
-};
 const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-/** A piece's arrival. How it comes is worked out from where it stands (see `natural`): out of the
- * mist below, or up through the top of what it stands on, or — floating, or with nothing clear
- * over it — growing out of itself. With `grow` it unfolds along that axis (0 x, 1 y, 2 z; 3 every
- * way) from `anchor`, or from its pivot, or from its `end` along that axis. Nothing fades in:
- * pieces are solid from their first moment. */
-type HubAssembly = Assembly & { ry?: number; grow?: 0 | 1 | 2 | 3; anchorPart?: number; anchor?: V3; end?: 'min' | 'max' | 'mid'; clip?: number; with?: number };
-
-/** The impossible triangle drawn edge by edge, as one stroke: along x out of the corner that will
- * close it, then up, then on towards the eye; last the corner, closing it. */
-function drawTriangle(t0: number, d: number): HubAssembly[] {
-  return [
-    { part: P.penrose, at: t0, from: [0, 0, 0], fade: false, dur: d, grow: 0, end: 'min' },
-    { part: P.penB, at: t0 + d, from: [0, 0, 0], fade: false, dur: d, grow: 1, end: 'min' },
-    { part: P.penC, at: t0 + 2 * d, from: [0, 0, 0], fade: false, dur: d, grow: 2, end: 'min' },
-    { part: P.penK, at: t0 + 3 * d, from: [0, 0, 0], fade: false, dur: Math.max(0.4, d * 0.6), grow: 3, end: 'mid' },
-  ];
-}
-
-/** The great building coming back (s, at its own pace): the triangle drawn first, then everything
- * rising round it. */
-const ASSEMBLY: HubAssembly[] = [
-  ...drawTriangle(0, 0.5),
-  ...unfolding(1.85, 1),
-  ...farOff(0.6, 1),
-];
-
-/** Everything under the triangle, from `t0` (durations times `slow`): the pillar and the front block
- * rise out of the mist, the back walks and the towers after them; the star rises out of the
- * pillar's crown; the two stairs fold out of the front block up to the landings; the crank slides
- * out of the block's face; the floating pieces grow out of the air. */
-function unfolding(t0: number, slow: number): HubAssembly[] {
-  const at = (dt: number) => t0 + dt * slow;
-  return [
-    { part: P.pillar, at: at(0), from: [0, -5, 0], fade: true, dur: 1.2 * slow },
-    { part: P.front, at: at(0.15), from: [0, -4, 0], fade: true, dur: 1.1 * slow },
-    { part: P.backL, at: at(0.3), from: [0, -4, 0], fade: true, dur: 1.1 * slow },
-    // (the drawbridge hangs from the back walk and the wheel is set in its wall: they come with it)
-    { part: P.bridge, with: P.backL, at: at(0.3), from: [0, 0, 0], fade: false, dur: 1.1 * slow },
-    { part: P.knob, with: P.backL, at: at(0.3), from: [0, 0, 0], fade: false, dur: 1.1 * slow },
-    { part: P.backR, at: at(0.4), from: [0, -4, 0], fade: true, dur: 1.1 * slow },
-    { part: P.twins, at: at(0.55), from: [0, -5, 0], fade: true, dur: 1.3 * slow },
-    { part: P.stairTower, at: at(0.65), from: [0, -5, 0], fade: true, dur: 1.3 * slow },
-    { part: P.star, at: at(1.0), from: [0, 1.6, 0], fade: true, dur: 0.7 * slow },
-    { part: P.stairL, at: at(1.2), from: [0, 0, 0], fade: false, dur: 0.9 * slow, grow: 0 },
-    { part: P.stairR, at: at(1.35), from: [0, 0, 0], fade: false, dur: 0.9 * slow, grow: 2 },
-    { part: P.crank, at: at(1.5), from: [0, 0, 0], fade: false, dur: 0.6 * slow, grow: 0 },
-    { part: P.crankWheel, at: at(1.5), from: [0, 0, 0], fade: false, dur: 0.6 * slow, grow: 0, anchorPart: P.crank },
-    { part: P.pavilion, at: at(1.25), from: [0, -2.5, 0], fade: true, dur: 0.9 * slow },
-  ];
-}
-
-/** The far city behind the page's words, coming up out of the haze from `t0`. */
-function farOff(t0: number, slow: number): HubAssembly[] {
-  return [P.farGate, P.farRotunda, P.farShrine, P.farIsles].map((part, i) => ({ part, at: t0 + i * 0.2 * slow, from: [0, -3, 0] as V3, fade: true, dur: 1.5 * slow }));
-}
-
-/** The opening, after Monument Valley's level openings (s): the sky alone and a title card; then
- * the world turns a quarter round into its angle as the camera draws back and the clouds part,
- * and the impossible triangle is drawn in the air edge by edge, closing as the turn settles; then
- * the building rises round it out of the mist — the pillar, the walls, the towers — the star comes
- * up out of the pillar's crown, the stairs fold out. The five places light up one by one, the
- * traveller steps out of her door, and the page comes in. */
+/** The opening, after Monument Valley's level openings (s): mist and a title card; then the world
+ * turns a quarter round into its angle as the camera draws back, and the mist parts from it as it
+ * turns — the tops first, the triangle high over the star, then the towers, the walls, the stairs,
+ * till only the mist below is left. The five places light up one by one, the traveller steps out of
+ * her door, and the page comes in. */
 export const OPENING = {
   title: 0.6,
   titleOut: 4.4,
   turn: 3.2,
   turnEnd: 10.2,
-  align: 9.4,
-  unfold: 10.1,
-  lights: 14.0,
-  walk: 14.7,
-  dawn: 15.1,
-  end: 16.9,
+  mistFrom: 3.8,
+  mistTo: 10.4,
+  lights: 11.0,
+  walk: 12.0,
+  dawn: 12.6,
+  end: 14.4,
 };
 export const INTRO_END = OPENING.end;
 /** The quarter turn, and the pull back: how far round the world starts, how near the camera. */
@@ -139,18 +75,13 @@ const NEAR = 1.6;
 const AXIS: V3 = [5, 0, 5];
 const FOCUS: V3 = [5, 7, 5];
 const easeSine = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 0.5 - 0.5 * Math.cos(Math.PI * t));
-const TRI_EDGE = 1.55;
-const INTRO_ASSEMBLY: HubAssembly[] = [
-  ...drawTriangle(OPENING.align - 3 * TRI_EDGE, TRI_EDGE),
-  ...unfolding(OPENING.unfold, 1.55),
-  ...farOff(OPENING.dawn - 0.6, 1),
-];
-/** The usual entrance: the great building rises this much faster than in the opening. */
-const ENTRANCE_PACE = 2.0;
-/** Coming back to the overview the great building assembles this much faster than in the intro. */
-const RETURN_PACE = 2.4;
-/** How long a building takes to sink, whole, into the mist (its lights going out first). */
-const SINK = 0.85;
+/** The mist (s): how long it takes to gather over a world going (its lights going out first), how
+ * long it takes to part from the next, and to part from the great building when the page opens. */
+const GATHER = 1.2;
+const PART = 2.2;
+const FIRST_PART = 2.6;
+/** How long the bank over a world just gone takes to thin away. */
+const BANK_THIN = 0.8;
 /** The drawbridge's turn, and the pause once it is locked before anyone steps on. */
 const BRIDGE_TURN = 1.1;
 const BRIDGE_HOLD = 0.14;
@@ -173,7 +104,6 @@ interface Def {
   model: Model;
   parts: number;
   pivots: V3[];
-  assembly: HubAssembly[];
   /** Its outline on screen at unit scale (what the framing fits). */
   extent: { x0: number; x1: number; y0: number; y1: number };
   room: Room | null;
@@ -181,19 +111,18 @@ interface Def {
   data: Float32Array;
   /** Its parts off in the distance (not framed), and how hazed. */
   distant: Record<number, number>;
-  /** Going: the floor in the mist it sinks through, and how far it must go to be under it. */
-  sink: { floor: number; depth: number };
+  /** Its lowest and highest points above the mist below (where the mist lies, and how deep). */
+  mistY: [number, number];
   /** Its colours by day (0) or dusk (1). */
   pal: (t: number) => Palette;
-  /** The great building's opening (its pieces' paths made clear, like `assembly`'s). */
-  intro?: HubAssembly[];
 }
 
 interface Stage {
   def: Def;
-  /** When it began to assemble, how fast, and when it began to sink (Infinity while it stays). */
+  /** When it came (standing, whole, in the mist), how long the mist takes to part from it, and when
+   * the mist began to gather over it (Infinity while it stays). */
   born: number;
-  pace: number;
+  clearIn: number;
   dies: number;
   layer: Layer;
 }
@@ -228,9 +157,12 @@ export class Valley {
   private away = false;
   private reduced: boolean;
 
-  // What stands (and what is sinking), and what comes next.
+  // What stands (and what is going into the mist), and what comes next.
   private stage: Stage;
-  private sinking: Stage | null = null;
+  private leaving: Stage | null = null;
+  /** The bank of mist over the world just gone: where it lay on the screen, and when it began to
+   * thin (it thins away while the next one's parts). */
+  private lastBank: { box: Box; color: RGB; at: number } | null = null;
   private next: { place: string; born: number } | null = null;
   private wanted = 'hub';
 
@@ -300,16 +232,13 @@ export class Valley {
     this.world = buildWorld();
     this.reduced = opts.reducedMotion;
     this.dark = this.darkTo = opts.dark ? 1 : 0;
-    const hubFog = blend(0).fog;
-    this.hubDef = this.define('hub', this.world.mesh, this.r.model(this.world.mesh, this.world.culledFrom), PART_COUNT, this.world.pivots, natural(ASSEMBLY, this.world.mesh, this.world.solids, hubFog), null, this.world.distant);
-    this.hubDef.intro = natural(INTRO_ASSEMBLY, this.world.mesh, this.world.solids, hubFog);
+    this.hubDef = this.define('hub', this.world.mesh, this.r.model(this.world.mesh, this.world.culledFrom), PART_COUNT, this.world.pivots, null, this.world.distant);
     for (const room of buildRooms()) {
-      const fog = roomPalette(room.id, 0).fog;
-      this.roomDefs.set(room.id, this.define(room.id, room.mesh, this.r.model(room.mesh, room.culledFrom), room.parts, room.pivots, natural(room.assembly, room.mesh, room.solids, fog), room, room.distant));
+      this.roomDefs.set(room.id, this.define(room.id, room.mesh, this.r.model(room.mesh, room.culledFrom), room.parts, room.pivots, room, room.distant));
     }
     this.figLayer = { model: this.r.model(buildFigure()), parts: new Float32Array(MAX_PARTS * 16), partFx: new Float32Array(MAX_PARTS * 4) };
     for (let i = 0; i < 3; i++) this.figLayer.partFx[i * 4 + 3] = NO_FLOOR;
-    this.stage = this.spawn(this.hubDef, -1000, 1);
+    this.stage = this.spawn(this.hubDef, -1000, 0);
     this.restAt(this.hubDef, this.station('about')!.walk);
     for (const s of this.world.stations) this.hotLevel.set(s.id, 0);
     // (her walks made ready while nothing else is happening)
@@ -334,7 +263,7 @@ export class Valley {
     resize();
   }
 
-  private define(place: string, data: Float32Array, model: Model, parts: number, pivots: V3[], assembly: HubAssembly[], room: Room | null, distant: Record<number, number> = {}): Def {
+  private define(place: string, data: Float32Array, model: Model, parts: number, pivots: V3[], room: Room | null, distant: Record<number, number> = {}): Def {
     // The outline: every vertex, but not what is lost in the mist below.
     const unit: View = { origin: [0, 0, 0], scale: 1, cx: 0, cy: 0 };
     const floor = room ? -Infinity : blend(0).fog[0] + 2.5;
@@ -356,17 +285,19 @@ export class Valley {
       y0 = Math.min(y0, sp[1] - spinR); y1 = Math.max(y1, sp[1] + spinR);
     }
     const pal = room ? (t: number) => roomPalette(room.id, t) : blend;
-    let top = -Infinity;
-    for (let i = 1; i < data.length; i += 8) top = Math.max(top, data[i]);
-    const sinkFloor = pal(0).fog[0] + 0.5;
-    return { place, model, parts, pivots, assembly, extent: { x0, x1, y0, y1 }, room, data, pal, distant, sink: { floor: sinkFloor, depth: top - sinkFloor + 4 } };
+    let lo = Infinity, top = -Infinity;
+    for (let i = 1; i < data.length; i += 8) {
+      lo = Math.min(lo, data[i]);
+      top = Math.max(top, data[i]);
+    }
+    return { place, model, parts, pivots, extent: { x0, x1, y0, y1 }, room, data, pal, distant, mistY: [Math.max(lo, pal(0).fog[0]), top] };
   }
 
-  private spawn(def: Def, born: number, pace: number): Stage {
+  private spawn(def: Def, born: number, clearIn: number): Stage {
     return {
       def,
       born,
-      pace,
+      clearIn,
       dies: Infinity,
       layer: { model: def.model, parts: new Float32Array(MAX_PARTS * 16), partFx: new Float32Array(MAX_PARTS * 4) },
     };
@@ -426,7 +357,7 @@ export class Valley {
 
   /** The page's layout changed: glide to the new framing (or jump there). */
   refit(instant = false) {
-    if (this.next || this.sinking) return;
+    if (this.next || this.leaving) return;
     this.glideTo(this.frameFor(this.stage.def), instant || this.reduced ? 0 : 0.8);
     if (instant) this.camFrom = this.camTo;
     this.kick();
@@ -460,9 +391,58 @@ export class Valley {
     this.kick();
   }
 
-  /** On the overview, standing still: its stations can be pointed at. */
+  /** On the overview, standing still and clear of the mist: its stations can be pointed at. */
   private get settled() {
-    return !this.stage.def.room && !this.next && !this.sinking;
+    return !this.stage.def.room && !this.next && !this.leaving && this.clock - this.stage.born >= this.stage.clearIn;
+  }
+
+  /** How deep in the mist a world stands now (0: clear, 1: lost in it). The mist's edge moves at an
+   * even pace: down a world as it parts, up it as it gathers. */
+  private mistOf(st: Stage) {
+    const age = this.clock - st.born;
+    let m = 0;
+    if (this.intro && st === this.stage) m = 1 - clamp01((age - OPENING.mistFrom) / (OPENING.mistTo - OPENING.mistFrom));
+    else if (st.clearIn > 0) m = 1 - clamp01(age / st.clearIn);
+    if (st.dies < Infinity) m = Math.max(m, clamp01((this.clock - st.dies) / GATHER));
+    return m;
+  }
+
+  /** The mist's colour: the sky's, paler. */
+  private mistColor(pal: Palette): RGB {
+    const k = 0.45 - 0.3 * this.dark;
+    return pal.skyIn.map((c) => lerp(c, 1, k)) as RGB;
+  }
+
+  /** Where a world lies on the screen. */
+  private stageBox(def: Def, v: View): Box {
+    const { x0, x1, y0, y1 } = def.extent;
+    return { x: v.cx + x0 * v.scale, y: v.cy + y0 * v.scale, w: (x1 - x0) * v.scale, h: (y1 - y0) * v.scale };
+  }
+
+  /** A bank of mist lying over a world's place on the screen, as thick as `m` (1: nothing of it
+   * shows); thinning, its clouds drift apart and settle lower. */
+  private bank(box: Box, m: number, color: RGB, seed: number): Puff[] {
+    if (m <= 0.004) return [];
+    const v = this.view();
+    const t = this.reduced ? 0 : this.clock;
+    const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+    const size = Math.max(box.w, box.h);
+    const n = 4;
+    const out: Puff[] = [];
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        const k = i * n + j + seed;
+        const jx = Math.sin(k * 12.9898) * 0.5, jy = Math.sin(k * 78.233) * 0.5;
+        let x = box.x + box.w * ((i + 0.5 + jx * 0.6) / n);
+        let y = box.y + box.h * ((j + 0.5 + jy * 0.6) / n);
+        const apart = (1 - m) * 0.7;
+        x += (x - cx) * apart + Math.sin(t * 0.25 + k) * size * 0.012;
+        y += (y - cy) * apart * 0.5 + (1 - m) * size * 0.06;
+        const r = size * (0.19 + 0.05 * (k % 3));
+        out.push({ at: unproject(v, x, y), r: r / v.scale, color, a: 0.9 * Math.pow(m, 1.4) });
+      }
+    }
+    return out;
   }
 
   /** The station under a point, if any. */
@@ -480,11 +460,10 @@ export class Valley {
     return best;
   }
 
-  /** The stations on screen — only once the great building stands complete. */
+  /** The stations on screen — only once the great building stands clear of the mist. */
   anchors(): Anchor[] {
-    if (this.stage.def.room || this.next || this.sinking) return [];
-    const done = Math.max(...this.hubDef.assembly.map((a) => a.at + a.dur));
-    if (!this.intro && (this.clock - this.stage.born) * this.stage.pace < done) return [];
+    if (this.stage.def.room || this.next || this.leaving) return [];
+    if (!this.intro && this.clock - this.stage.born < this.stage.clearIn) return [];
     const v = this.view();
     return this.world.stations.map((s) => {
       const [x, y] = project(v, this.lifted(s.anchor, s.parts[0]));
@@ -500,9 +479,10 @@ export class Valley {
     this.wanted = place;
     const def = this.defOf(place);
     if (instant || this.reduced) {
-      this.sinking = null;
+      this.leaving = null;
+      this.lastBank = null;
       this.next = null;
-      this.stage = this.spawn(def, -1000, 1);
+      this.stage = this.spawn(def, -1000, 0);
       this.skyFrom = null;
       this.camFrom = this.camTo = this.frameFor(def);
       this.restAt(def, this.arrivalWalk(place, from));
@@ -517,16 +497,16 @@ export class Valley {
       return this.wait(this.next.born + 0.9 - now);
     }
     // The traveller goes in: through the room's door if she is in a room; on the overview through
-    // the station's door if she stands by it. Otherwise she goes down with the building.
+    // the station's door if she stands by it. Otherwise the mist takes her with the building.
     const leaving = this.stage;
     const exit = this.exitWalk(leaving.def, place);
-    let sinkAt = now + 0.25;
+    let gatherAt = now + 0.25;
     this.walk = null;
     if (exit) {
       const speed = Math.max(1.3, exit.total / EXIT_MAX);
       this.walk = { ...exit, t0: now, speed };
-      // (the building waits until she is nearly through)
-      sinkAt = now + Math.min(0.6, (exit.total / speed) * 0.7);
+      // (the mist waits until she is nearly through)
+      gatherAt = now + Math.min(0.6, (exit.total / speed) * 0.7);
     }
     this.figShowAt = -1;
     // The camera leans in towards the door being gone through.
@@ -534,11 +514,11 @@ export class Valley {
     if (door) {
       const v = this.view();
       const [dx, dy] = project(v, door);
-      this.glideTo({ origin: door, scale: v.scale * 1.25, cx: dx, cy: dy }, sinkAt - now + SINK + 0.4);
+      this.glideTo({ origin: door, scale: v.scale * 1.18, cx: dx, cy: dy }, gatherAt - now + GATHER + 0.3);
     }
-    leaving.dies = sinkAt;
-    this.sinking = leaving;
-    const born = sinkAt + SINK + 0.05;
+    leaving.dies = gatherAt;
+    this.leaving = leaving;
+    const born = gatherAt + GATHER;
     this.next = { place, born };
     this.figPath = this.arrivalWalk(place, from);
     this.kick();
@@ -601,25 +581,25 @@ export class Valley {
     return this.track(def, [...path].reverse(), 'in');
   }
 
-  /** The usual entrance: the great building rising round its triangle in a couple of seconds, the
-   * page there from the first frame (the full opening is kept for replaying). */
+  /** The usual entrance: the mist parting from the great building in a couple of seconds, the page
+   * there from the first frame (the full opening is kept for replaying). */
   enter() {
     this.intro = false;
     this.resetMech();
-    this.stage = this.spawn(this.hubDef, this.clock, ENTRANCE_PACE);
+    this.stage = this.spawn(this.hubDef, this.clock, FIRST_PART);
     this.figAlpha = 0;
     this.walk = null;
     this.figStage = this.stage;
     this.figPath = this.station('about')!.walk;
-    this.figShowAt = this.clock + this.builtAt(this.stage) / ENTRANCE_PACE + 0.15;
+    this.figShowAt = this.clock + FIRST_PART * 0.8;
     this.kick();
   }
 
-  /** The intro: the great building assembles out of the mist; resolves when it is done. */
+  /** The opening: the mist parts from the great building as it turns; resolves when it is done. */
   playIntro(): Promise<void> {
     this.intro = true;
     this.resetMech();
-    this.stage = this.spawn(this.hubDef, this.clock, 1);
+    this.stage = this.spawn(this.hubDef, this.clock, OPENING.mistTo);
     this.figAlpha = 0;
     this.walk = null;
     this.figStage = this.stage;
@@ -840,52 +820,12 @@ export class Valley {
     return {};
   }
 
-  /** A part of a building this frame: its own motion, then assembling or sinking. */
-  private pose(st: Stage, part: number): { off: V3; rx: number; ry: number; rz: number; alpha: number; scale: V3; anchor: V3; floor: number } {
+  /** A part of a building this frame: its own motion (it never arrives or leaves piece by piece:
+   * whole worlds come and go in the mist). */
+  private pose(st: Stage, part: number): { off: V3; rx: number; ry: number; rz: number } {
     const def = st.def;
     const own: Pose = def.room ? (this.reduced ? {} : def.room.pose(part, this.clock - st.born, this.clock)) : this.hubPose(part);
-    const off: V3 = own.off ? [own.off[0], own.off[1], own.off[2]] : [0, 0, 0];
-    let ry = own.ry ?? 0;
-    let alpha = 1;
-    const scale: V3 = [1, 1, 1];
-    let anchor: V3 = def.pivots[part] ?? [0, 0, 0];
-    let floor = NO_FLOOR;
-    const list = this.intro && def.intro ? def.intro : def.assembly;
-    const a = list.find((x) => x.part === part);
-    const t = (this.clock - st.born) * st.pace;
-    if (a && t < a.at + a.dur + 0.05) {
-      const k = clamp01((t - a.at) / a.dur);
-      if (a.grow !== undefined) {
-        // Unfolding out of the face it hangs from, or growing out of itself (never past where it
-        // will stand, so never into anything).
-        const e = Math.max(0.002, easeOut(k));
-        if (a.grow === 3) scale[0] = scale[1] = scale[2] = e;
-        else scale[a.grow] = e;
-        if (a.anchor) anchor = a.anchor;
-        else if (a.anchorPart !== undefined) anchor = def.pivots[a.anchorPart];
-      } else if (a.ry) {
-        // Turning high over its place, then dropping into it (so it never turns through anything).
-        ry += (1 - easeBack(k / 0.55)) * a.ry;
-        const e = easeOut((k - 0.5) / 0.5);
-        for (let i = 0; i < 3; i++) off[i] += a.from[i] * (1 - e);
-      } else {
-        // Rising, slowing as it arrives (no overshoot: it must not dip into what it stands on);
-        // nothing of it below the floor it rises through is drawn.
-        const e = easeQuint(k);
-        for (let i = 0; i < 3; i++) off[i] += a.from[i] * (1 - e);
-        if (a.clip !== undefined) floor = a.clip;
-      }
-      // Solid from its first moment (not there at all before).
-      alpha = t >= a.at ? 1 : 0;
-    }
-    if (st.dies < Infinity) {
-      // Going: the whole building sinks as one, solid, down through a floor in the mist.
-      const k = clamp01((this.clock - st.dies) / SINK);
-      off[1] -= def.sink.depth * easeInQuart(k);
-      floor = def.sink.floor;
-      if (k >= 1) alpha = 0;
-    }
-    return { off, rx: own.rx ?? 0, ry, rz: own.rz ?? 0, alpha, scale, anchor, floor };
+    return { off: own.off ? [own.off[0], own.off[1], own.off[2]] : [0, 0, 0], rx: own.rx ?? 0, ry: own.ry ?? 0, rz: own.rz ?? 0 };
   }
 
   /** A point carried with its part of the great building (a station on a floating piece floats). */
@@ -905,7 +845,7 @@ export class Valley {
       fx[i * 4 + 3] = NO_FLOOR;
     }
     for (let i = 0; i < st.def.parts; i++) {
-      const { off, rx, ry, rz, alpha, scale, anchor, floor } = this.pose(st, i);
+      const { off, rx, ry, rz } = this.pose(st, i);
       const pv = st.def.pivots[i] ?? [0, 0, 0];
       const r = rotation(rx, ry, rz);
       let t: V3 = [
@@ -913,11 +853,6 @@ export class Valley {
         pv[1] + off[1] - (r[1] * pv[0] + r[4] * pv[1] + r[7] * pv[2]),
         pv[2] + off[2] - (r[2] * pv[0] + r[5] * pv[1] + r[8] * pv[2]),
       ];
-      if (scale[0] !== 1 || scale[1] !== 1 || scale[2] !== 1) {
-        // Unfolding: scaled about its anchor after its own motion (rows of the 3×3, and the shift).
-        for (let c = 0; c < 3; c++) for (let row = 0; row < 3; row++) r[c * 3 + row] *= scale[row];
-        t = [0, 1, 2].map((j) => scale[j] * (t[j] - anchor[j]) + anchor[j]) as V3;
-      }
       let rr = r;
       if (!st.def.room && PENROSE.includes(i) && this.spinAngle) {
         // The triangle turning about the line of sight through its middle: on screen, a plain turn.
@@ -936,9 +871,8 @@ export class Valley {
         t = [w[0] * d[0] + w[3] * d[1] + w[6] * d[2] + AXIS[0], w[1] * d[0] + w[4] * d[1] + w[7] * d[2] + AXIS[1], w[2] * d[0] + w[5] * d[1] + w[8] * d[2] + AXIS[2]];
       }
       M.set([rr[0], rr[1], rr[2], 0, rr[3], rr[4], rr[5], 0, rr[6], rr[7], rr[8], 0, t[0], t[1], t[2], 1], i * 16);
-      fx[i * 4] = alpha;
+      fx[i * 4] = 1;
       fx[i * 4 + 2] = st.def.distant[i] ?? 0;
-      fx[i * 4 + 3] = floor;
     }
     if (!st.def.room) {
       for (const s of this.world.stations) {
@@ -955,9 +889,7 @@ export class Valley {
   private tether(st: Stage, weight: number): { beam: Beam; glows: Glow[] } | null {
     // Only once the building stands complete: the rune kindles, then the light climbs from it to
     // the triangle, and where it reaches the triangle a soft flare opens and settles.
-    const built = this.builtAt(st);
-    const age = (this.clock - st.born) * st.pace;
-    const since = (age - built) / (this.intro ? 1 : st.pace);
+    const since = this.clock - st.born - this.builtAt(st);
     const kindle = easeOut(clamp01((since - 0.1) / 0.6));
     const reach = ease(clamp01((since - 0.45) / 1.4));
     if (kindle * weight <= 0.004) return null;
@@ -980,10 +912,9 @@ export class Valley {
     };
   }
 
-  /** When a building stands complete (on its own clock; what stands off in the distance aside). */
+  /** When a world stands clear of the mist (after it came). */
   private builtAt(st: Stage) {
-    const list = this.intro && st.def.intro ? st.def.intro : st.def.assembly;
-    return Math.max(0, ...list.filter((a) => !(a.part in st.def.distant)).map((a) => a.at + a.dur));
+    return this.intro && st === this.stage ? OPENING.mistTo : st.clearIn;
   }
 
   /** The opening's turn of the world (0 once it has settled). */
@@ -1003,11 +934,10 @@ export class Valley {
   /** The opening's clouds: a bank over the valley at first, parting as the world turns. */
   private openingClouds(pal: Palette): Puff[] {
     const t = this.clock - this.stage.born;
-    const gone = clamp01((t - 3.4) / 5.0);
+    const gone = clamp01((t - OPENING.mistFrom - 2.6) / (OPENING.mistTo - OPENING.mistFrom - 2.2));
     if (gone >= 1) return [];
-    const white: number[] = [1, 1, 1];
-    const color = pal.skyIn.map((c, i) => lerp(c, white[i], 0.45 - 0.3 * this.dark)) as [number, number, number];
-    const open = easeOut(clamp01((t - 1.2) / 7.0));
+    const color = this.mistColor(pal);
+    const open = easeOut(clamp01((t - OPENING.mistFrom + 1.2) / (OPENING.mistTo - OPENING.mistFrom)));
     return Array.from({ length: 12 }, (_, i) => {
       const a = (i / 12) * Math.PI * 2 + 0.4;
       const r = 1.5 + (i % 3) * 1.1 + open * (7 + (i % 4) * 1.5);
@@ -1041,15 +971,10 @@ export class Valley {
       const d = Math.hypot(this.fig[0] - pav.anchor[0], this.fig[2] - pav.anchor[2]);
       if (d < 1.6 && Math.abs(this.fig[1] - (pav.anchor[1] - 1.12)) < 0.3) lift = [...(this.hubPose(P.pavilion).off ?? lift)] as V3;
     }
-    // She goes down with the building she stands in.
-    let alpha = this.figAlpha;
-    let floor = NO_FLOOR;
-    if (st && st.dies < Infinity) {
-      const k = clamp01((this.clock - st.dies) / SINK);
-      lift[1] -= st.def.sink.depth * easeInQuart(k);
-      floor = st.def.sink.floor;
-      if (k >= 1) alpha = 0;
-    }
+    // She is in the mist with the world she stands in.
+    const alpha = this.figAlpha;
+    this.figLayer.mist = st ? this.mistOf(st) : 0;
+    this.figLayer.mistY = st ? st.def.mistY : undefined;
     const c = Math.cos(this.figYaw), s = Math.sin(this.figYaw);
     const f = this.fig;
     const at = (fwd: number, up: number, body: number): number[] => [
@@ -1062,10 +987,7 @@ export class Valley {
       // forward and back as it swings; lifted only while it swings forward
       this.figLayer.parts.set(at(amp * Math.sin(p) * 0.075, amp * Math.max(0, Math.cos(p)) * 0.035, 0), i * 16);
     }
-    for (let i = 0; i < 3; i++) {
-      this.figLayer.partFx[i * 4] = alpha;
-      this.figLayer.partFx[i * 4 + 3] = floor;
-    }
+    for (let i = 0; i < 3; i++) this.figLayer.partFx[i * 4] = alpha;
     return alpha;
   }
 
@@ -1073,8 +995,8 @@ export class Valley {
     const t = this.clock;
     const dusk = this.dark;
     const pulse = (k: number) => (this.reduced ? 1 : 0.85 + 0.15 * Math.sin(t * 1.6 + k));
-    const age = (this.clock - st.born) * st.pace;
-    // Lights come on once the building stands, each opening out from its source.
+    const age = this.clock - st.born;
+    // Lights come on once the building stands clear, each opening out from its source.
     const built = this.builtAt(st);
     if (st.def.room) {
       const on = clamp01((age - built + 0.1) / 0.8);
@@ -1114,33 +1036,32 @@ export class Valley {
         this.introDone = null;
       }
     }
-    // A building gone under; the next one rises out of the mist.
-    if (this.sinking && this.clock - this.sinking.dies > SINK + 0.05) this.sinking = null;
+    // The mist lies thick over the world going: behind it, the next one, standing whole. The mist
+    // parts from it, and the sky turns to its own.
     if (this.next && this.clock >= this.next.born) {
       const def = this.defOf(this.next.place);
-      // The sky turns to the new world's as it rises.
+      if (this.leaving) this.lastBank = { box: this.stageBox(this.leaving.def, this.view()), color: this.mistColor(this.leaving.def.pal(this.dark)), at: this.clock };
       this.skyFrom = this.skyNow;
       this.skyT0 = this.clock;
-      this.stage = this.spawn(def, this.next.born, def.room ? 1 : RETURN_PACE);
+      this.stage = this.spawn(def, this.next.born, PART);
       this.next = null;
-      this.sinking = null;
-      // The camera arrives a little near and settles back.
+      this.leaving = null;
+      // The camera, a little near, settles back as the mist parts.
       const to = this.frameFor(def);
       const box = this.boxOf(def);
-      this.camFrom = zoomAbout(to, 1.1, [box.x + box.w / 2, box.y + box.h / 2]);
+      this.camFrom = zoomAbout(to, 1.06, [box.x + box.w / 2, box.y + box.h / 2]);
       this.camTo = to;
       this.camT0 = this.clock;
-      this.camDur = 1.5;
-      // She is gone with the old world; she comes out of the new one's door once every piece of it
-      // has settled (nothing moves round her as she walks).
-      const end = Math.max(...def.assembly.map((a) => a.at + a.dur)) / this.stage.pace;
-      this.figShowAt = this.clock + end + 0.1;
+      this.camDur = PART;
+      // She was taken with the old world; she comes out of the new one's door as the mist clears.
+      this.figShowAt = this.clock + PART * 0.8;
       this.walk = null;
       this.figAlpha = 0;
       this.figStage = this.stage;
       if (!def.room) this.resetMech();
     }
-    if (this.next || this.sinking || this.clock - this.stage.born < 6) busy = true;
+    if (this.lastBank && this.clock - this.lastBank.at > BANK_THIN) this.lastBank = null;
+    if (this.next || this.leaving || this.lastBank || this.clock - this.stage.born < 6) busy = true;
 
     // The light follows the system's appearance.
     if (this.dark !== this.darkTo) {
@@ -1172,10 +1093,16 @@ export class Valley {
     let glows: Glow[] = [];
     const beams: Beam[] = [];
     const puffs: Puff[] = [];
-    for (const st of [this.sinking, this.next ? null : this.stage]) {
+    const v0 = this.view();
+    for (const st of [this.leaving, this.next ? null : this.stage]) {
       if (!st) continue;
       st.layer.pal = st.def.pal(this.dark);
       this.matrices(st);
+      // (in the mist, coming or going: over it, a bank of cloud)
+      const m = this.mistOf(st);
+      st.layer.mist = m;
+      st.layer.mistY = st.def.mistY;
+      if (!(this.intro && st === this.stage)) puffs.push(...this.bank(this.stageBox(st.def, v0), m, this.mistColor(st.layer.pal), st === this.leaving ? 0 : 5));
       layers.push(st.layer);
       // (its lights go out first, before it sinks)
       const fading = st.dies < Infinity ? 1 - clamp01((this.clock - st.dies + 0.25) / 0.35) : 1;
@@ -1196,6 +1123,7 @@ export class Valley {
         for (const p of room.puffs?.(st.layer.pal, t) ?? []) puffs.push({ ...p, a: p.a * shown });
       }
     }
+    if (this.lastBank) puffs.push(...this.bank(this.lastBank.box, 1 - ease(clamp01((this.clock - this.lastBank.at) / BANK_THIN)), this.lastBank.color, 0));
     // The sky: the standing building's world, crossing over from the last one's.
     const skyTo = this.stage.def.pal(this.dark);
     const sk = this.skyFrom && !this.reduced ? ease(clamp01((this.clock - this.skyT0) / 1.3)) : 1;
@@ -1253,108 +1181,6 @@ function rotation(rx: number, ry: number, rz: number): number[] {
   };
   const m = mul(mul(Ry, Rx), Rz);
   return [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]];
-}
-
-const easeQuint = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.pow(1 - t, 5));
-
-/**
- * How each piece arrives, from where it stands. Standing in the mist, it rises out of the mist;
- * standing on another piece, it rises up through that piece's top (nothing of it is drawn below
- * that floor, so it never shows passing through anything); floating — or with something in the way
- * of its rise — it grows out of itself, which never takes it past where it will stand. Pieces given
- * a `grow` keep it (their anchor found from `end`). Nothing fades in: pieces are solid.
- */
-function natural(list: HubAssembly[], data: Float32Array, solids: Solid[], fog: [number, number]): HubAssembly[] {
-  const bounds = new Map<number, { min: V3; max: V3 }>();
-  for (let i = 0; i < data.length; i += 8) {
-    const p = data[i + 7];
-    let e = bounds.get(p);
-    if (!e) bounds.set(p, (e = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] }));
-    for (let k = 0; k < 3; k++) {
-      e.min[k] = Math.min(e.min[k], data[i + k]);
-      e.max[k] = Math.max(e.max[k], data[i + k]);
-    }
-  }
-  // (overlaps thinner than `e` are slivers of trim, not anything passing through)
-  const meetBy = (a: { min: V3; max: V3 }, b: { min: V3; max: V3 }, e: number) => [0, 1, 2].every((k) => Math.min(a.max[k], b.max[k]) - Math.max(a.min[k], b.min[k]) > e);
-  const out = list.map((a0) => {
-    const a: HubAssembly = { ...a0, from: [0, 0, 0], fade: false };
-    const e = bounds.get(a.part);
-    if (!e) return a;
-    const mid: V3 = [(e.min[0] + e.max[0]) / 2, (e.min[1] + e.max[1]) / 2, (e.min[2] + e.max[2]) / 2];
-    if (a.grow !== undefined) {
-      if (a0.end) {
-        a.anchor = [...mid] as V3;
-        if (a.grow !== 3) a.anchor[a.grow] = a0.end === 'min' ? e.min[a.grow] : a0.end === 'max' ? e.max[a.grow] : mid[a.grow];
-      }
-      return a;
-    }
-    if (a.ry) return { ...a, from: a0.from };
-    const mine = solids.filter((s) => s.part === a.part);
-    const others = solids.filter((s) => s.part !== a.part);
-    const inMist = e.min[1] <= fog[1] - 0.5;
-    const floor = inMist ? Math.max(e.min[1], fog[0] + 0.5) : e.min[1];
-    // (standing: with something whose top is at its foot under most of it — not just near it)
-    const area = Math.max(1e-6, (e.max[0] - e.min[0]) * (e.max[2] - e.min[2]));
-    let under = 0;
-    for (const o of others) {
-      if (Math.abs(o.max[1] - e.min[1]) > 0.3) continue;
-      const w = Math.min(o.max[0], e.max[0]) - Math.max(o.min[0], e.min[0]), d = Math.min(o.max[2], e.max[2]) - Math.max(o.min[2], e.min[2]);
-      if (w > 0 && d > 0) under += w * d;
-    }
-    const stands = inMist || under / area > 0.35;
-    // Its way up: each of its solids swept up from the floor to where it stands. In the way is only
-    // what already stands there and hangs over the floor — rising into its underside would show;
-    // what reaches down to the floor it simply rises up through and out of the top of.
-    const there = (o: Solid) => {
-      const b = list.find((x) => x.part === o.part);
-      return !b || b.at < a.at + Math.max(a.dur, 0.9) * 0.8;
-    };
-    // (rising up into a thing from below and out of its top never shows: its underside is not seen,
-    // and its top is where it comes out. What shows is cutting into its sides.)
-    const inside = (s: Solid, o: Solid) => s.min[0] >= o.min[0] - 0.12 && s.max[0] <= o.max[0] + 0.12 && s.min[2] >= o.min[2] - 0.12 && s.max[2] <= o.max[2] + 0.12;
-    // (what it is set into where it stands, it comes up through by design)
-    const into = (o: Solid) => mine.some((s) => meetBy(s, o, 0.12));
-    let why = stands ? '' : 'floating';
-    const clear = stands && !mine.some((s) => {
-      const swept = { min: [s.min[0], floor, s.min[2]] as V3, max: s.max };
-      const o = others.find((o) => o.min[1] > floor + 0.1 && there(o) && meetBy(swept, o, 0.12) && !inside(s, o) && !into(o));
-      if (o) why = `part ${o.part} [${o.min.map((v) => v.toFixed(1))}]–[${o.max.map((v) => v.toFixed(1))}] in the way of [${s.min.map((v) => v.toFixed(1))}]–[${s.max.map((v) => v.toFixed(1))}]`;
-      return !!o;
-    });
-    // (for the dev tools: why a piece grows in place rather than rising)
-    (a as { why?: string }).why = clear ? undefined : why;
-    if (clear) {
-      a.clip = floor - 0.002;
-      a.from = [0, -(e.max[1] - floor) - 0.05, 0];
-      a.dur = Math.max(a.dur, 0.9);
-      return a;
-    }
-    // Floating stone rises from the mist all the way up to where it floats, if nothing is in its way
-    // (rigid, like everything built: only what grows — leaves, flowers — grows).
-    if (!stands) {
-      const deep = fog[0] + 0.5;
-      const rises = !mine.some((s) => {
-        const swept = { min: [s.min[0], deep, s.min[2]] as V3, max: s.max };
-        return others.some((o) => there(o) && meetBy(swept, o, 0.12) && !into(o));
-      });
-      if (rises) {
-        a.clip = deep - 0.002;
-        a.from = [0, -(e.max[1] - deep) - 0.05, 0];
-        a.dur = Math.min(1.6, Math.max(a.dur, 0.9 + (e.max[1] - deep) * 0.03));
-        (a as { why?: string }).why = undefined;
-        return a;
-      }
-    }
-    a.grow = 3;
-    a.anchor = stands ? [mid[0], e.min[1], mid[2]] : mid;
-    return a;
-  });
-  // What is fixed to another piece arrives as part of it: the same way, at the same moment.
-  return out.map((a) => {
-    const lead = a.with === undefined ? undefined : out.find((b) => b.part === a.with);
-    return lead ? { ...lead, part: a.part, with: a.with } : a;
-  });
 }
 
 /** A turn by `a` about the unit axis `u`, as a column-major 3×3 (Rodrigues). */

@@ -79,6 +79,12 @@ export function project(v: View, p: V3): [number, number] {
   return [v.cx + (d[0] * R[0] + d[2] * R[2]) * v.scale, v.cy - (d[0] * U[0] + d[1] * U[1] + d[2] * U[2]) * v.scale];
 }
 
+/** A world point seen at a screen point (CSS px): one of the many along the line of sight. */
+export function unproject(v: View, x: number, y: number): V3 {
+  const a = (x - v.cx) / v.scale, b = -(y - v.cy) / v.scale;
+  return [v.origin[0] + a * R[0] + b * U[0], v.origin[1] + b * U[1], v.origin[2] + a * R[2] + b * U[2]];
+}
+
 const SKY = /* glsl */ `
 uniform vec3 uSkyIn, uSkyOut;
 uniform vec2 uSkyAt;
@@ -152,8 +158,20 @@ uniform vec4 uPartFx[${MAX_PARTS}]; // x: presence (0 = still in the mist), y: l
 uniform vec2 uFog;
 uniform vec3 uGlow;
 uniform int uPass;   // 0: whole pieces; 1, 2: pieces half there (depth first, then colour, see-through)
+uniform float uMist;     // how deep this building is in the mist: 0 clear … 1 lost in it
+uniform vec2 uMistY;     // its lowest and highest points (the mist lies low: tops come out first)
+uniform float uMistLight;
+uniform float uTime;
 ${SKY}
 out vec4 outColor;
+float hash3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float noise3(vec3 p) {
+  vec3 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = mix(mix(hash3(i), hash3(i + vec3(1, 0, 0)), f.x), mix(hash3(i + vec3(0, 1, 0)), hash3(i + vec3(1, 1, 0)), f.x), f.y);
+  float b = mix(mix(hash3(i + vec3(0, 0, 1)), hash3(i + vec3(1, 0, 1)), f.x), mix(hash3(i + vec3(0, 1, 1)), hash3(i + vec3(1, 1, 1)), f.x), f.y);
+  return mix(a, b, f.z);
+}
 void main() {
   vec4 pf = uPartFx[vPart];
   if ((uPass == 0) != (pf.x >= 0.999)) discard;
@@ -187,7 +205,22 @@ void main() {
   vec3 bg = sky(cssPx());
   c = mix(c, bg, pf.z);
   float mist = fx.y > 0.0 ? smoothstep(uFog.x, uFog.y, vW.y) : 1.0;
-  outColor = vec4(mix(bg, c, mist), uPass == 0 ? 1.0 : pf.x);
+  c = mix(bg, c, mist);
+  if (uMist > 0.0) {
+    // A world coming or going in the mist: it lies low and drifts, so the tops come out of it first
+    // (and go into it last), its edge ragged. Deep in it is only the sky; along its edge, a lighter
+    // breath of mist.
+    float h = clamp((vW.y - uMistY.x) / max(1.0, uMistY.y - uMistY.x), 0.0, 1.0);
+    vec3 q = vW * 0.42 + vec3(uTime * 0.11, -uTime * 0.04, uTime * 0.07);
+    float n = 0.62 * noise3(q) + 0.38 * noise3(q * 2.1 + 7.3);
+    float field = 0.6 * h + 0.4 * n;
+    float m = uMist * 1.4 - 0.2;
+    float dd = m - field;
+    float k = smoothstep(-0.02, 0.2, dd);
+    float lift = uMistLight * (1.0 - smoothstep(0.12, 0.55, dd)) * (1.0 - smoothstep(0.85, 1.0, uMist));
+    c = mix(c, mix(bg, vec3(1.0), lift), k);
+  }
+  outColor = vec4(c, uPass == 0 ? 1.0 : pf.x);
 }`;
 
 const SKY_VS = /* glsl */ `#version 300 es
@@ -349,6 +382,9 @@ export interface Layer {
   parts: Float32Array;
   partFx: Float32Array;
   pal?: Palette;
+  /** How deep in the mist it stands (0: clear), and its lowest and highest points. */
+  mist?: number;
+  mistY?: [number, number];
 }
 
 function compile(gl: WebGL2RenderingContext, vs: string, fs: string) {
@@ -499,6 +535,8 @@ export class Renderer {
     puffs?: Puff[];
     time: number;
     dust: number;
+    /** How much lighter than the sky the mist is. */
+    mistLight?: number;
   }) {
     const { gl } = this;
     const { w, h, dpr, view, pal } = o;
@@ -535,6 +573,8 @@ export class Renderer {
     gl.clear(gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.mesh.p);
     this.common(this.mesh, w, h, dpr, view, pal);
+    gl.uniform1f(this.mesh.u('uTime'), o.time);
+    gl.uniform1f(this.mesh.u('uMistLight'), o.mistLight ?? 0.3);
     let current: Palette | null = null;
     const layer = (l: Layer, pass: number) => {
       const lp = l.pal ?? pal;
@@ -543,6 +583,8 @@ export class Renderer {
         current = lp;
       }
       gl.uniform1i(this.mesh.u('uPass'), pass);
+      gl.uniform1f(this.mesh.u('uMist'), l.mist ?? 0);
+      gl.uniform2fv(this.mesh.u('uMistY'), l.mistY ?? [0, 10]);
       gl.uniformMatrix4fv(this.mesh.u('uPart'), false, l.parts);
       gl.uniform4fv(this.mesh.u('uPartFx'), l.partFx);
       const md = l.model;
