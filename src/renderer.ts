@@ -66,6 +66,25 @@ export interface Puff {
   a: number;
 }
 
+/** A ripple spreading on still water: where, how wide now, how strong. */
+export interface Ripple {
+  at: V3;
+  r: number;
+  a: number;
+  color: RGB;
+}
+
+/** Rain falling through a box round a world: how much of it, its colour, how fast and long its
+ * streaks are, and how far the wind leans them. */
+export interface Rain {
+  box: { min: V3; size: V3 };
+  a: number;
+  color: RGB;
+  fall: number;
+  len: number;
+  slant: number;
+}
+
 export const MAX_PARTS = 24;
 export const MAX_MATS = 32;
 
@@ -274,6 +293,38 @@ void main() {
   outColor = vec4(uDust * a, a);
 }`;
 
+// Rain: thin streaks falling through a box round a world, set in it (what stands in front of a
+// streak hides it), each a little quicker or slower than the next, fading at the top of the box and
+// into the mist below.
+const RAIN_VS = /* glsl */ `#version 300 es
+layout(location = 0) in vec4 aSeed;     // xyz in the box (0–1), w: its own pace
+layout(location = 1) in vec2 aCorner;   // x: 0 its head … 1 its tail; y: −1, 1 across
+uniform vec3 uBoxMin, uBoxSize;
+uniform float uTime, uFall, uLen, uSlant, uWidth;
+uniform vec2 uRes;
+${CAMERA}
+out float vA;
+void main() {
+  vec3 p = aSeed.xyz;
+  float pace = 0.8 + 0.4 * aSeed.w;
+  p.y = fract(p.y - uTime * uFall * pace / uBoxSize.y);
+  vec3 w = uBoxMin + p * uBoxSize + vec3(-uSlant, 1.0, 0.0) * aCorner.x * uLen * pace;
+  vec4 c = clipOf(w, uRes);
+  c.x += aCorner.y * uWidth / uRes.x;
+  gl_Position = c;
+  vA = smoothstep(0.0, 0.3, p.y) * (1.0 - smoothstep(0.8, 1.0, p.y)) * (1.0 - aCorner.x) * (0.55 + 0.45 * aSeed.w);
+}`;
+
+const RAIN_FS = /* glsl */ `#version 300 es
+precision mediump float;
+in float vA;
+uniform vec4 uRain;
+out vec4 outColor;
+void main() {
+  float a = uRain.a * vA;
+  outColor = vec4(uRain.rgb * a, a);
+}`;
+
 // Halos and clouds: screen-aligned discs at world points. Halos are added on (light); clouds are
 // laid over (premultiplied colour and coverage).
 const DISC_VS = /* glsl */ `#version 300 es
@@ -282,7 +333,7 @@ layout(location = 1) in vec2 aCorner;   // −1…1
 layout(location = 2) in vec2 aRA;       // radius (world units), strength
 layout(location = 3) in vec3 aColor;
 uniform vec2 uRes;
-uniform float uCloud;
+uniform int uShape;   // 0: a halo, 1: a cloud, 2: a ripple (a ring lying flat, set in the scene)
 ${CAMERA}
 out vec2 vUv;
 out float vA;
@@ -292,9 +343,10 @@ void main() {
   vA = aRA.y;
   vUv = aCorner;
   vColor = aColor;
-  // (clouds are wider than they are tall)
-  c.xy += aCorner * aRA.x * uS / uRes * 2.0 * (uCloud > 0.5 ? vec2(1.8, 1.0) : vec2(1.0));
-  c.z = -1.0;
+  // (clouds are wider than they are tall; a ring lying flat is seen as an ellipse)
+  vec2 asp = uShape == 1 ? vec2(1.8, 1.0) : uShape == 2 ? vec2(1.0, 0.57735) : vec2(1.0);
+  c.xy += aCorner * aRA.x * uS / uRes * 2.0 * asp;
+  c.z = uShape == 2 ? c.z - 0.003 : -1.0;
   gl_Position = c;
 }`;
 
@@ -303,11 +355,15 @@ precision mediump float;
 in vec2 vUv;
 in float vA;
 in vec3 vColor;
-uniform highp float uCloud;
+uniform highp int uShape;
 out vec4 outColor;
 void main() {
   float r = length(vUv);
-  if (uCloud > 0.5) {
+  if (uShape == 2) {
+    // A ripple: a thin ring, softer inside than out.
+    float a = smoothstep(0.55, 0.88, r) * (1.0 - smoothstep(0.88, 1.0, r)) * vA;
+    outColor = vec4(vColor * a, a);
+  } else if (uShape == 1) {
     // A cloud: soft all the way out, so many of them melt into one bank.
     float q = max(0.0, 1.0 - r * r);
     float a = q * q * vA;
@@ -438,6 +494,9 @@ export class Renderer {
   private dustP: Program;
   private discP: Program;
   private beamP: Program;
+  private rainP: Program;
+  private rainVao: WebGLVertexArrayObject;
+  private rainN: number;
   private dustVao: WebGLVertexArrayObject;
   private dustN: number;
   private disc: ReturnType<typeof stream>;
@@ -454,6 +513,7 @@ export class Renderer {
     this.dustP = compile(gl, DUST_VS, DUST_FS);
     this.discP = compile(gl, DISC_VS, DISC_FS);
     this.beamP = compile(gl, BEAM_VS, BEAM_FS);
+    this.rainP = compile(gl, RAIN_VS, RAIN_FS);
 
     // Dust seeds.
     this.dustN = 140;
@@ -468,6 +528,26 @@ export class Renderer {
     gl.bufferData(gl.ARRAY_BUFFER, seeds, gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, 0);
+
+    // Rain: each streak a thin quad (its seed, and which corner).
+    this.rainN = 700;
+    const rain = new Float32Array(this.rainN * 6 * 6);
+    for (let i = 0, k = 0; i < this.rainN; i++) {
+      const seed = [rnd(), rnd(), rnd(), rnd()];
+      for (const [end, side] of [[0, -1], [0, 1], [1, 1], [0, -1], [1, 1], [1, -1]]) {
+        rain.set([...seed, end, side], k);
+        k += 6;
+      }
+    }
+    this.rainVao = gl.createVertexArray()!;
+    gl.bindVertexArray(this.rainVao);
+    const rb = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, rb);
+    gl.bufferData(gl.ARRAY_BUFFER, rain, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 24, 16);
 
     this.disc = stream(gl, [3, 2, 2, 3]);
     this.beam = stream(gl, [3, 2, 4]);
@@ -533,6 +613,8 @@ export class Renderer {
     glows: Glow[];
     beams?: Beam[];
     puffs?: Puff[];
+    rain?: Rain | null;
+    ripples?: Ripple[];
     time: number;
     dust: number;
     /** How much lighter than the sky the mist is. */
@@ -643,11 +725,24 @@ export class Renderer {
       gl.bufferData(gl.ARRAY_BUFFER, v, gl.DYNAMIC_DRAW);
       gl.drawArrays(gl.TRIANGLES, 0, beams.length * 6);
     }
-    gl.depthMask(true);
-    gl.disable(gl.DEPTH_TEST);
-
-    // Halos (added on), then clouds (laid over).
-    const discs = (list: { at: V3; r: number; a: number; color: RGB }[], cloud: boolean) => {
+    // Rain, set in the scene too.
+    const rn = o.rain;
+    if (rn && rn.a > 0.004) {
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.useProgram(this.rainP.p);
+      this.common(this.rainP, w, h, dpr, view, pal);
+      gl.uniform3fv(this.rainP.u('uBoxMin'), rn.box.min);
+      gl.uniform3fv(this.rainP.u('uBoxSize'), rn.box.size);
+      gl.uniform1f(this.rainP.u('uTime'), o.time);
+      gl.uniform1f(this.rainP.u('uFall'), rn.fall);
+      gl.uniform1f(this.rainP.u('uLen'), rn.len);
+      gl.uniform1f(this.rainP.u('uSlant'), rn.slant);
+      gl.uniform1f(this.rainP.u('uWidth'), Math.max(1, 1.2 * dpr) / dpr);
+      gl.uniform4f(this.rainP.u('uRain'), rn.color[0], rn.color[1], rn.color[2], rn.a);
+      gl.bindVertexArray(this.rainVao);
+      gl.drawArrays(gl.TRIANGLES, 0, this.rainN * 6);
+    }
+    const discs = (list: { at: V3; r: number; a: number; color: RGB }[], shape: number) => {
       if (!list.length) return;
       const v = new Float32Array(list.length * 6 * this.disc.floats);
       let k = 0;
@@ -657,18 +752,23 @@ export class Renderer {
           k += this.disc.floats;
         }
       }
-      if (cloud) gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      if (shape) gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       else gl.blendFunc(gl.ONE, gl.ONE);
       gl.useProgram(this.discP.p);
       this.common(this.discP, w, h, dpr, view, pal);
-      gl.uniform1f(this.discP.u('uCloud'), cloud ? 1 : 0);
+      gl.uniform1i(this.discP.u('uShape'), shape);
       gl.bindVertexArray(this.disc.vao);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.disc.buf);
       gl.bufferData(gl.ARRAY_BUFFER, v, gl.DYNAMIC_DRAW);
       gl.drawArrays(gl.TRIANGLES, 0, list.length * 6);
     };
-    discs(o.glows.filter((g) => g.a > 0.004).map((g) => ({ ...g, color: g.color ?? pal.glow })), false);
-    discs((o.puffs ?? []).filter((p) => p.a > 0.004), true);
+    // Ripples on still water (set in the scene: what stands in front hides them); then halos (added
+    // on) and clouds (laid over).
+    discs((o.ripples ?? []).filter((r) => r.a > 0.004), 2);
+    gl.depthMask(true);
+    gl.disable(gl.DEPTH_TEST);
+    discs(o.glows.filter((g) => g.a > 0.004).map((g) => ({ ...g, color: g.color ?? pal.glow })), 0);
+    discs((o.puffs ?? []).filter((p) => p.a > 0.004), 1);
     gl.disable(gl.BLEND);
     gl.bindVertexArray(null);
   }

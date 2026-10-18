@@ -9,7 +9,7 @@ import type { V3 } from './geometry';
 import { along, groundTrack, heightAt, isJump, pathLength, wallBehind } from './ground';
 import { buildFigure } from './kit';
 import { blend, roomPalette, skyMix } from './palettes';
-import { MAX_PARTS, project, Renderer, unproject, type Beam, type Glow, type Layer, type Model, type Palette, type Puff, type RGB, type View } from './renderer';
+import { MAX_PARTS, project, Renderer, unproject, type Beam, type Glow, type Layer, type Model, type Palette, type Puff, type Rain, type RGB, type Ripple, type View } from './renderer';
 import { buildRooms, type Pose, type Room } from './rooms';
 import { buildWorld, P, PART_COUNT, PENROSE, type World } from './world';
 
@@ -113,6 +113,8 @@ interface Def {
   distant: Record<number, number>;
   /** Its lowest and highest points above the mist below (where the mist lies, and how deep). */
   mistY: [number, number];
+  /** The box it stands in (what is off in the distance aside, and what is lost in the mist). */
+  bounds: { min: V3; max: V3 };
   /** Its colours by day (0) or dusk (1). */
   pal: (t: number) => Palette;
 }
@@ -218,7 +220,7 @@ export class Valley {
   private walk: Walk | null = null;
   private figShowAt = -1;
   private figPath: V3[] | null = null;
-  /** The building she stands in: when it sinks she sinks with it. */
+  /** The world she stands in: when the mist takes it, it takes her too. */
   private figStage: Stage | null = null;
   private tracks = new Map<string, Track>();
 
@@ -285,12 +287,19 @@ export class Valley {
       y0 = Math.min(y0, sp[1] - spinR); y1 = Math.max(y1, sp[1] + spinR);
     }
     const pal = room ? (t: number) => roomPalette(room.id, t) : blend;
+    const fog = pal(0).fog[0];
     let lo = Infinity, top = -Infinity;
-    for (let i = 1; i < data.length; i += 8) {
-      lo = Math.min(lo, data[i]);
-      top = Math.max(top, data[i]);
+    const bmin: V3 = [Infinity, fog, Infinity], bmax: V3 = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < data.length; i += 8) {
+      lo = Math.min(lo, data[i + 1]);
+      top = Math.max(top, data[i + 1]);
+      if (data[i + 7] in distant || data[i + 1] < fog) continue;
+      for (let k = 0; k < 3; k++) {
+        if (k !== 1) bmin[k] = Math.min(bmin[k], data[i + k]);
+        bmax[k] = Math.max(bmax[k], data[i + k]);
+      }
     }
-    return { place, model, parts, pivots, extent: { x0, x1, y0, y1 }, room, data, pal, distant, mistY: [Math.max(lo, pal(0).fog[0]), top] };
+    return { place, model, parts, pivots, extent: { x0, x1, y0, y1 }, room, data, pal, distant, mistY: [Math.max(lo, fog), top], bounds: { min: bmin, max: bmax } };
   }
 
   private spawn(def: Def, born: number, clearIn: number): Stage {
@@ -637,7 +646,7 @@ export class Valley {
   /** The bridge, by itself: once she has come to rest by the twin towers it turns up and she crosses
    * to the star; she stays a while and comes back, and it turns down after her. Wherever else she
    * stands it turns up, stays a moment and goes down again. Nothing of it moves while anything
-   * else does (the building assembling, a world going, her walking), nor with motion paused. */
+   * else does (the mist still on the building, a world going, her walking), nor with motion paused. */
   private stepAuto() {
     if (!this.settled || this.intro || this.reduced || this.stage.def.room) return;
     if (this.walk || this.figShowAt >= 0 || this.figStage !== this.stage) {
@@ -882,6 +891,89 @@ export class Valley {
     }
   }
 
+  /** Rain falling through a world, as much as it shows (none with motion paused). */
+  private rainOf(st: Stage, weight: number): Rain | null {
+    if (!st.def.room?.rain || this.reduced || weight <= 0.004) return null;
+    const { min, max } = st.def.bounds;
+    const d = this.dark;
+    return {
+      box: { min: [min[0] - 1.5, min[1] + 1, min[2] - 1.5], size: [max[0] - min[0] + 3, max[1] - min[1] + 4, max[2] - min[2] + 3] },
+      a: (0.3 + 0.08 * d) * weight,
+      color: [lerp(0.42, 0.84, d), lerp(0.53, 0.9, d), lerp(0.64, 1, d)],
+      fall: 9,
+      len: 0.5,
+      slant: 0.16,
+    };
+  }
+
+  /** Now and then a shooting star, far off behind a world, in a night sky: over the great building
+   * and the ruins, at dusk. Its head runs on, its tail draws out after it and is gone. */
+  private shootingStars(st: Stage, weight: number, v: View): Beam[] {
+    const night = st.def.room ? !!st.def.room.stars : true;
+    const w = weight * this.dark;
+    if (!night || this.reduced || w <= 0.01) return [];
+    const EVERY = 5.5, DUR = 0.95;
+    const hash = (n: number) => {
+      const x = Math.sin(n * 91.7 + 13.1) * 43758.5453;
+      return x - Math.floor(x);
+    };
+    const out: Beam[] = [];
+    const box = this.stageBox(st.def, v);
+    const size = Math.max(box.w, box.h);
+    const slot = Math.floor(this.clock / EVERY);
+    for (const c of [slot - 1, slot]) {
+      if (hash(c) > 0.8) continue;
+      const k = (this.clock - c * EVERY - hash(c + 0.3) * (EVERY - DUR)) / DUR;
+      if (k <= 0 || k >= 1) continue;
+      // where it starts (high over the world's place), and which way it falls
+      const sx = box.x + box.w * (-0.05 + 1.1 * hash(c + 0.6));
+      const sy = box.y + box.h * (-0.12 + 0.3 * hash(c + 0.9));
+      const left = hash(c + 1.2) < 0.5;
+      const ang = (0.42 + 0.25 * hash(c + 1.5)) * (left ? -1 : 1);
+      const dir: [number, number] = [left ? -Math.cos(ang) : Math.cos(ang), Math.abs(Math.sin(ang))];
+      const head: [number, number] = [sx + dir[0] * size * 0.42 * k, sy + dir[1] * size * 0.42 * k];
+      const tail = size * 0.2 * Math.sqrt(Math.sin(Math.PI * k));
+      const end: [number, number] = [head[0] - dir[0] * tail, head[1] - dir[1] * tail];
+      const n: [number, number] = [-dir[1], dir[0]];
+      // (far behind everything: what stands in front of it hides it)
+      const far = (x: number, y: number): V3 => {
+        const p = unproject(v, x, y);
+        return [p[0] - 40, p[1] - 40, p[2] - 40];
+      };
+      const at = (p: [number, number], half: number, side: number) => far(p[0] + n[0] * half * side, p[1] + n[1] * half * side);
+      out.push({
+        quad: [at(head, 2.6, -1), at(head, 2.6, 1), at(end, 0.8, 1), at(end, 0.8, -1)],
+        color: [1, 0.95, 0.86],
+        a: 0.95 * Math.sin(Math.PI * k) * w,
+      });
+    }
+    return out;
+  }
+
+  /** The rings rain makes on a world's still water: each drop's ring spreads and is gone. */
+  private ripplesOf(st: Stage, weight: number): Ripple[] {
+    const pools = st.def.room?.rain?.pools;
+    if (!pools || this.reduced || weight <= 0.004) return [];
+    const t = this.clock;
+    const color: RGB = [lerp(1, 0.86, this.dark), lerp(1, 0.92, this.dark), 1];
+    const out: Ripple[] = [];
+    const hash = (n: number) => {
+      const x = Math.sin(n * 127.1) * 43758.5453;
+      return x - Math.floor(x);
+    };
+    pools.forEach((pool, pi) => {
+      const SLOTS = 7, EVERY = 1.3;
+      for (let j = 0; j < SLOTS; j++) {
+        const u = t / EVERY + j / SLOTS + pi * 0.37;
+        const c = Math.floor(u), k = u - c;
+        const n = c * 31 + j * 7 + pi * 101;
+        const at: V3 = [lerp(pool.x[0], pool.x[1], hash(n)), pool.y, lerp(pool.z[0], pool.z[1], hash(n + 0.5))];
+        out.push({ at, r: 0.06 + 0.3 * easeOut(k), a: 0.5 * (1 - k) * weight, color });
+      }
+    });
+    return out;
+  }
+
   /**
    * The light between the tall tower's rune and the impossible triangle over it: it rises once the
    * triangle has closed, breathes with it, and brightens when Research (the rune) is pointed at.
@@ -1093,6 +1185,8 @@ export class Valley {
     let glows: Glow[] = [];
     const beams: Beam[] = [];
     const puffs: Puff[] = [];
+    const ripples: Ripple[] = [];
+    let rain: Rain | null = null;
     const v0 = this.view();
     for (const st of [this.leaving, this.next ? null : this.stage]) {
       if (!st) continue;
@@ -1104,7 +1198,7 @@ export class Valley {
       st.layer.mistY = st.def.mistY;
       if (!(this.intro && st === this.stage)) puffs.push(...this.bank(this.stageBox(st.def, v0), m, this.mistColor(st.layer.pal), st === this.leaving ? 0 : 5));
       layers.push(st.layer);
-      // (its lights go out first, before it sinks)
+      // (its lights go out first, before the mist gathers)
       const fading = st.dies < Infinity ? 1 - clamp01((this.clock - st.dies + 0.25) / 0.35) : 1;
       glows = glows.concat(this.glows(st, fading));
       if (!st.def.room) {
@@ -1114,6 +1208,11 @@ export class Valley {
           glows.push(...tie.glows);
         }
       }
+      // (weather falls only where the world shows through the mist)
+      const clear = (1 - m) * fading;
+      rain = this.rainOf(st, clear) ?? rain;
+      ripples.push(...this.ripplesOf(st, clear));
+      beams.push(...this.shootingStars(st, clear, v0));
       const room = st.def.room;
       if (room) {
         const since = this.clock - st.born;
@@ -1157,6 +1256,8 @@ export class Valley {
       glows,
       beams,
       puffs,
+      rain,
+      ripples,
       time: this.reduced ? 20 : this.clock,
       dust: this.intro ? clamp01((this.clock - this.stage.born) / 2) : 1,
     });

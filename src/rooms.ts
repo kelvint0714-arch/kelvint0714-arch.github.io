@@ -1,7 +1,8 @@
 // Behind each door, a world of its own (after Monument Valley's levels, each in its own light; the
 // colours are in src/palettes.ts). Opening a section, the traveller walks in through its door on the
-// great building, which sinks into the mist; this one assembles out of it and she steps out of its
-// door.
+// great building and the mist gathers over it; when the mist parts, this one stands there and she
+// steps out of its door. Some have weather of their own: rain on the Lotus Palace's pool, shooting
+// stars over the Moonlit Ruins by night.
 //   About     — the Lotus Palace: pagoda towers, a pool with a lotus, rooms cut open in the walls
 //   Research  — the Moonlit Ruins: an arcade broken off in steps, a window still full of night, a
 //               stair into the sky, stones stopped in the air as they fell
@@ -43,6 +44,10 @@ export interface Room {
   pose: (part: number, since: number, t: number) => Pose;
   beams?: (pal: Palette, since: number, t: number) => Beam[];
   puffs?: (pal: Palette, t: number) => Puff[];
+  /** Weather of its own: rain (with the still water it rings, as ripples), and shooting stars in its
+   * sky by night. */
+  rain?: { pools: { y: number; x: [number, number]; z: [number, number] }[] };
+  stars?: boolean;
 }
 
 const easeOut = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.pow(1 - t, 3));
@@ -301,6 +306,8 @@ function lotusPalace(): Room {
     pivots,
     parts: 16,
     distant: { 11: 0.1, 12: 0.18, 13: 0.38, 14: 0.3, 15: 0.28 },
+    // (rain on the lotus pool)
+    rain: { pools: [{ y: 4.31, x: [-1.55, 1.55], z: [-1.55, 1.55] }] },
     walk: [[-B + TW / 2 + 0.93, WY, B - TW / 2 - 0.38], [-1.3, WY, 2.8], [0.6, WY, 2.75]],
     glows: [
       { at: lighthouse, r: 1.3, mat: M.lamp },
@@ -586,6 +593,8 @@ function moonRuins(): Room {
     pivots,
     parts: 14,
     distant: { 9: 0.24, 10: 0.42, 11: 0.36, 12: 0.3, 13: 0.12 },
+    // (a night world: shooting stars over the ruins)
+    stars: true,
     walk: [[LX1 + 0.05, 0, -3.65], [-5.0, 0, -3.65], [-3.3, 0, -1.7], [-2.1, 0, -0.35]],
     glows: [
       { at: [RC[0], 0.3, RC[2]], r: 1.15, mat: M.glow },
