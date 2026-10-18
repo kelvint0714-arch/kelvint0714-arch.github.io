@@ -189,7 +189,7 @@ function roomBox(w: number, h: number) {
 
 const LABEL_GAP = 64;
 function onFrame(anchors: Anchor[]) {
-  // The labels wait until the great building stands (it may be sinking or assembling).
+  // The labels wait until the great building stands clear of the mist.
   document.documentElement.classList.toggle('no-anchors', !anchors.length);
   if (observing || current || !anchors.length) return;
   const wide = hubMode() === 'wide';
@@ -352,7 +352,8 @@ function route() {
   currentSub = sub;
   current = next;
   // On narrow screens a section's world takes the top of the screen: the page goes back up to meet
-  // it (the overview, sinking, is drawn where the page starts), and comes back down on the way out.
+  // it (the overview, going into the mist, is drawn where the page starts), and comes back down on
+  // the way out.
   const stacked = hubMode() === 'stacked';
   if (next && !previous) {
     hubScroll = window.scrollY;
@@ -447,8 +448,8 @@ function reveal() {
   document.body.classList.add('ready');
 }
 
-/** The opening, after Monument Valley's: a title card over an empty sky, then the world turning
- * into its angle as it assembles out of the mist (see OPENING in src/valley.ts), the traveller
+/** The opening, after Monument Valley's: a title card over a bank of cloud, then the world turning
+ * into its angle as the mist parts from it (see OPENING in src/valley.ts), the traveller
  * stepping out, and the page coming in round it. Any key or a tap finishes it. */
 async function intro(v: NonNullable<typeof scene>) {
   app.inert = true;

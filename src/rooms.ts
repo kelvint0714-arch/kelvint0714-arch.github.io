@@ -1,7 +1,8 @@
 // Behind each door, a world of its own (after Monument Valley's levels, each in its own light; the
 // colours are in src/palettes.ts). Opening a section, the traveller walks in through its door on the
-// great building, which sinks into the mist; this one assembles out of it and she steps out of its
-// door.
+// great building and the mist gathers over it; when the mist parts, this one stands there and she
+// steps out of its door. Some have weather of their own: rain on the Lotus Palace's pool, shooting
+// stars over the Moonlit Ruins by night.
 //   About     — the Lotus Palace: pagoda towers, a pool with a lotus, rooms cut open in the walls
 //   Research  — the Moonlit Ruins: an arcade broken off in steps, a window still full of night, a
 //               stair into the sky, stones stopped in the air as they fell
@@ -13,19 +14,6 @@
 import { Mesh, archShape, rect, type Solid, type V3 } from './geometry';
 import { islet, kit, M, place, seen } from './kit';
 import type { Beam, Palette, Puff, RGB } from './renderer';
-
-export interface Assembly {
-  part: number;
-  /** When it arrives (s), and whence it comes (only whether from below matters now: the scene
-   * works out how each piece comes from where it stands). */
-  at: number;
-  from: V3;
-  fade: boolean;
-  dur: number;
-  /** Unfolds along this axis (0 x, 1 y, 2 z; 3 every way) from this end of itself. */
-  grow?: 0 | 1 | 2 | 3;
-  end?: 'min' | 'max' | 'mid';
-}
 
 export interface Pose {
   off?: V3;
@@ -42,7 +30,6 @@ export interface Room {
   culledFrom?: number;
   pivots: V3[];
   parts: number;
-  assembly: Assembly[];
   /** The door the traveller steps out of, then her walk; and, if she walks on, her loop (a vertical
    * step in it is a jump, taken where no one can see). */
   walk: V3[];
@@ -57,6 +44,10 @@ export interface Room {
   pose: (part: number, since: number, t: number) => Pose;
   beams?: (pal: Palette, since: number, t: number) => Beam[];
   puffs?: (pal: Palette, t: number) => Puff[];
+  /** Weather of its own: rain (with the still water it rings, as ripples), and shooting stars in its
+   * sky by night. */
+  rain?: { pools: { y: number; x: [number, number]; z: [number, number] }[] };
+  stars?: boolean;
 }
 
 const easeOut = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.pow(1 - t, 3));
@@ -315,23 +306,8 @@ function lotusPalace(): Room {
     pivots,
     parts: 16,
     distant: { 11: 0.1, 12: 0.18, 13: 0.38, 14: 0.3, 15: 0.28 },
-    assembly: [
-      { part: 0, at: 0, from: [0, -4, 0], fade: true, dur: 1.1 },
-      { part: 1, at: 0.25, from: [0, 2.5, 0], fade: true, dur: 0.8 },
-      { part: 2, at: 0.45, from: [0, -3, 0], fade: true, dur: 0.9 },
-      { part: 4, at: 0.55, from: [0, -5, 0], fade: true, dur: 1.0 },
-      { part: 5, at: 0.65, from: [0, -5, 0], fade: true, dur: 1.0 },
-      { part: 8, at: 1.75, from: [0, 0, 0], fade: false, dur: 0.7, grow: 0, end: 'min' },
-      { part: 6, at: 1.1, from: [0, 2.5, 0], fade: false, dur: 0.6 },
-      { part: 7, at: 1.2, from: [0, 2.5, 0], fade: false, dur: 0.6 },
-      { part: 3, at: 1.35, from: [0, -0.9, 0], fade: false, dur: 0.6 },
-      { part: 9, at: 1.2, from: [0, 0, 0], fade: true, dur: 0.6 },
-      { part: 10, at: 0.9, from: [-2, 0, 0], fade: true, dur: 1.0 },
-      { part: 11, at: 0.5, from: [0, -3, 0], fade: true, dur: 1.1 },
-      { part: 12, at: 0.6, from: [0, -3, 0], fade: true, dur: 1.1 },
-      { part: 13, at: 0.4, from: [0, -4, 0], fade: true, dur: 1.2 },
-      { part: 14, at: 0.7, from: [0, -3, 0], fade: true, dur: 1.1 },
-    ],
+    // (rain on the lotus pool)
+    rain: { pools: [{ y: 4.31, x: [-1.55, 1.55], z: [-1.55, 1.55] }] },
     walk: [[-B + TW / 2 + 0.93, WY, B - TW / 2 - 0.38], [-1.3, WY, 2.8], [0.6, WY, 2.75]],
     glows: [
       { at: lighthouse, r: 1.3, mat: M.lamp },
@@ -617,21 +593,8 @@ function moonRuins(): Room {
     pivots,
     parts: 14,
     distant: { 9: 0.24, 10: 0.42, 11: 0.36, 12: 0.3, 13: 0.12 },
-    assembly: [
-      { part: 0, at: 0, from: [0, -4, 0], fade: true, dur: 1.0 },
-      { part: 1, at: 0.2, from: [0, 3, 0], fade: true, dur: 1.0 },
-      { part: 2, at: 0.3, from: [0, 3, 0], fade: true, dur: 1.0 },
-      { part: 4, at: 0.45, from: [0, 3, 0], fade: true, dur: 0.9 },
-      { part: 5, at: 0.55, from: [0, 2, 0], fade: true, dur: 0.8 },
-      { part: 3, at: 0.7, from: [0, 1.2, 0], fade: true, dur: 0.7 },
-      { part: 6, at: 1.15, from: [0, 1.6, 0], fade: true, dur: 0.9 },
-      { part: 7, at: 1.1, from: [0, 0, 0], fade: true, dur: 0.6 },
-      { part: 8, at: 1.0, from: [0, 1.0, 0], fade: true, dur: 0.6 },
-      { part: 9, at: 0.35, from: [0, -3, 0], fade: true, dur: 1.2 },
-      { part: 10, at: 0.5, from: [0, -3, 0], fade: true, dur: 1.2 },
-      { part: 11, at: 0.6, from: [0, -3, 0], fade: true, dur: 1.2 },
-      { part: 13, at: 0.3, from: [0, -2, 0], fade: true, dur: 1.0 },
-    ],
+    // (a night world: shooting stars over the ruins)
+    stars: true,
     walk: [[LX1 + 0.05, 0, -3.65], [-5.0, 0, -3.65], [-3.3, 0, -1.7], [-2.1, 0, -0.35]],
     glows: [
       { at: [RC[0], 0.3, RC[2]], r: 1.15, mat: M.glow },
@@ -834,20 +797,6 @@ function amberSky(): Room {
     pivots,
     parts: 13,
     distant: { 9: 0.08, 10: 0.36, 11: 0.4, 12: 0.3 },
-    assembly: [
-      { part: 0, at: 0, from: [0, -3, 0], fade: true, dur: 0.9 },
-      { part: 1, at: 0.15, from: [0, -4, 0], fade: true, dur: 0.9 },
-      { part: 3, at: 0.3, from: [0, -5, 0], fade: true, dur: 1.1 },
-      { part: 7, at: 0.45, from: [0, -5, 0], fade: true, dur: 1.1 },
-      { part: 4, at: 0.75, from: [-1.6, 0, 0], fade: false, dur: 0.6 },
-      { part: 2, at: 0.8, from: [0, 0, 0], fade: true, dur: 0.9 },
-      { part: 5, at: 1.0, from: [0, 2.0, 0], fade: false, dur: 0.6 },
-      { part: 8, at: 0.9, from: [0, 1.5, 0], fade: true, dur: 1.0 },
-      { part: 6, at: 1.35, from: [0, 0, 0], fade: true, dur: 0.5 },
-      { part: 9, at: 0.35, from: [0, -3, 0], fade: true, dur: 1.0 },
-      { part: 10, at: 0.2, from: [0, -5, 0], fade: true, dur: 1.3 },
-      { part: 11, at: 0.7, from: [0, 2, 0], fade: true, dur: 1.0 },
-    ],
     walk: [[1.08, 0, 0.45], [1.35, 0, 0.3], [1.1, 0, -1.8]],
     glows: [
       { at: [0.5, yb + L + 0.3, 0.5], r: 0.8, mat: M.petal },
@@ -1082,22 +1031,6 @@ function penroseStair(): Room {
     pivots,
     parts: 14,
     distant: { 10: 0.22, 11: 0.38, 12: 0.32, 13: 0.3 },
-    assembly: [
-      { part: 2, at: 0, from: [0, -4, 0], fade: true, dur: 1.0 },
-      { part: 4, at: 0.15, from: [0, -5, 0], fade: true, dur: 1.0 },
-      { part: 3, at: 0.3, from: [0, 3, 0], fade: true, dur: 1.0 },
-      // the ring drawn flight by flight, round from the door
-      { part: 1, at: 0.4, from: [0, 0, 0], fade: true, dur: 0.6, grow: 3, end: 'mid' },
-      { part: 0, at: 0.7, from: [0, 0, 0], fade: false, dur: 0.6, grow: 2, end: 'min' },
-      { part: 7, at: 1.1, from: [0, 0, 0], fade: false, dur: 0.6, grow: 0, end: 'min' },
-      { part: 8, at: 1.5, from: [0, 0, 0], fade: false, dur: 0.45, grow: 2, end: 'max' },
-      { part: 9, at: 1.8, from: [0, 0, 0], fade: false, dur: 0.45, grow: 0, end: 'max' },
-      { part: 6, at: 1.3, from: [0, 0, 0], fade: true, dur: 0.6 },
-      { part: 10, at: 0.3, from: [0, -4, 0], fade: true, dur: 1.2 },
-      { part: 11, at: 0.5, from: [0, -4, 0], fade: true, dur: 1.1 },
-      { part: 12, at: 0.6, from: [0, -3, 0], fade: true, dur: 1.1 },
-      { part: 13, at: 0.8, from: [0, 2, 0], fade: true, dur: 1.0 },
-    ],
     walk: [[-H + 0.05, Y1, A], [0, Y1, A]],
     // round the ring; at the last landing on along the first flight's line, then the step along
     // the line of sight back onto it (no one can see it)
@@ -1309,20 +1242,6 @@ function violetTree(): Room {
     k.frame([c[0] - 0.5, c[1] - 2.2, c[2] - 0.6], 'z', 1.0, 1.6, 0.03, M.line, 18);
   }
   pivots[18] = seen(-18, -1, 4);
-  const assembly: Assembly[] = [
-    { part: 0, at: 0, from: [0, -5, 0], fade: true, dur: 1.1 },
-    { part: 1, at: 0.3, from: [0, 2.5, 0], fade: true, dur: 0.9 },
-    { part: 15, at: 0.35, from: [0, -4, 0], fade: true, dur: 1.2 },
-    { part: 16, at: 0.6, from: [0, -3, 0], fade: true, dur: 1.1 },
-    { part: 17, at: 0.7, from: [0, -3, 0], fade: true, dur: 1.1 },
-    { part: 4, at: 0.4, from: [0, -4, 0], fade: true, dur: 1.0 },
-    { part: 5, at: 0.5, from: [0, -4, 0], fade: true, dur: 1.0 },
-    { part: 2, at: 0.55, from: [0, 0, 0], fade: true, dur: 0.8 },
-    { part: 6, at: 0.85, from: [0, -1.6, 0], fade: false, dur: 0.6 },
-    { part: 3, at: 1.1, from: [0, 1.4, 0], fade: false, dur: 0.6 },
-    { part: 14, at: 1.2, from: [0, 0, 0], fade: true, dur: 0.6 },
-  ];
-  leaves.forEach((_, i) => assembly.push({ part: 7 + i, at: 0.95 + i * 0.07, from: [0, 1.0, 0], fade: false, dur: 0.5 }));
   return {
     id: 'contact',
     mesh: new Float32Array(m.data),
@@ -1330,7 +1249,6 @@ function violetTree(): Room {
     pivots,
     parts: 19,
     distant: { 15: 0.18, 16: 0.3, 17: 0.36, 18: 0.3 },
-    assembly,
     walk: [[-9.4, LY, -0.6], [-7.6, LY, -0.6], ...[-7.0, -6.4, -5.8, -5.2, -4.6, -4.0].map((x) => [x, rampY(x), -0.6] as V3), [-3.2, DECK, -0.6], [-1.6, DECK, -0.6]],
     speed: 0.9,
     glows: [
