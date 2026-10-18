@@ -29,17 +29,15 @@ export interface Box {
   h: number;
 }
 
-/** The one mechanism's states (see `mechAction`): the bridge hanging; turning up; up and locked;
- * the traveller crossing; she on the star; she coming back; the bridge turning down. */
+/** The one mechanism's states (it works by itself, see `stepAuto`): the bridge hanging; turning
+ * up; up and locked; the traveller crossing; she on the star; she coming back; the bridge turning
+ * down. */
 export type MechState = 'closed' | 'rotating' | 'aligned' | 'crossing' | 'arrived' | 'returning' | 'resetting';
 
-/** What the page shows of the mechanism: what turning the wheel would do now (null while it is
- * busy), a line about it, and where the wheel is on the screen (null off the overview). */
+/** What the page shows of the mechanism: a line about what it is doing. */
 export interface MechInfo {
   state: MechState;
-  action: string | null;
   note: string;
-  knob: { x: number; y: number } | null;
 }
 
 export interface ValleyOptions {
@@ -153,12 +151,16 @@ const ENTRANCE_PACE = 2.0;
 const RETURN_PACE = 2.4;
 /** How long a building takes to sink, whole, into the mist (its lights going out first). */
 const SINK = 0.85;
-/** The drawbridge's turn, the pause once it is locked before anyone steps on, and how often the
- * triangle turns a third of the way round of itself when nothing else moves. */
+/** The drawbridge's turn, and the pause once it is locked before anyone steps on. */
 const BRIDGE_TURN = 1.1;
 const BRIDGE_HOLD = 0.14;
-const IDLE_TURN_EVERY = 18;
-const IDLE_TURN = 2.8;
+/** The bridge works by itself (s): how long after she comes to rest it first turns up, how long she
+ * stays on the star, how long it stays up with nobody to cross, and the wait before it turns up
+ * again once it is down. */
+const AUTO_FIRST = 2.5;
+const AUTO_STAR = 5;
+const AUTO_HOLD = 3.5;
+const AUTO_AGAIN = 12;
 /** Quintic: still at both ends (for things that must start and stop exactly). */
 const ease5 = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * t * (t * (6 * t - 15) + 10));
 /** No floor: everything of a piece is drawn. */
@@ -248,7 +250,6 @@ export class Valley {
   private turnTo = 0;
   private turnT0 = -100;
   private turnDur = 1;
-  private lastTurn = 0;
 
   // The mechanism: the drawbridge (0 hanging, 1 up in place) and its state.
   private bridgeK = 0;
@@ -258,6 +259,8 @@ export class Valley {
   private mech: MechState = 'closed';
   private mechHold = 0;
   private crossAfter: 'over' | 'back' | null = null;
+  /** When the bridge next moves by itself (0: not yet set). */
+  private autoAt = 0;
   private mechSent = '';
   onMech: ((m: MechInfo) => void) | null = null;
   // The sky crossing from one building's world to the next.
@@ -447,6 +450,8 @@ export class Valley {
 
   setReducedMotion(reduced: boolean) {
     this.reduced = reduced;
+    if (reduced) this.stillMech();
+    this.autoAt = 0;
     this.kick();
   }
 
@@ -649,31 +654,46 @@ export class Valley {
     return 'elsewhere';
   }
 
-  /** Turning the wheel. By the twin towers she crosses once the bridge is up; on the star she comes
-   * back and the bridge goes down after her; anywhere else it only turns the bridge. While
-   * anything is moving it does nothing (it never stacks, and never takes the bridge from under her). */
-  mechAction() {
-    if (!this.settled || this.intro) return;
-    const at = this.where();
-    if (this.reduced) {
-      // (no motion: straight to the next still state)
-      if (this.mech === 'closed' && at === 'home') this.placeAt(this.world.crossing[this.world.crossing.length - 1], 1, 'arrived');
-      else if ((this.mech === 'arrived' || this.mech === 'closed' || this.mech === 'aligned') && at === 'star') this.placeAt(this.world.crossing[0], 0, 'closed');
-      else if (this.mech === 'closed') this.placeAt(null, 1, 'aligned');
-      else if (this.mech === 'aligned') this.placeAt(null, 0, 'closed');
-      this.kick();
+  /** The bridge, by itself: once she has come to rest by the twin towers it turns up and she crosses
+   * to the star; she stays a while and comes back, and it turns down after her. Wherever else she
+   * stands it turns up, stays a moment and goes down again. Nothing of it moves while anything
+   * else does (the building assembling, a world going, her walking), nor with motion paused. */
+  private stepAuto() {
+    if (!this.settled || this.intro || this.reduced || this.stage.def.room) return;
+    if (this.walk || this.figShowAt >= 0 || this.figStage !== this.stage) {
+      this.autoAt = 0;
       return;
     }
-    if (this.mech === 'closed') {
+    const m = this.mech;
+    if (m !== 'closed' && m !== 'aligned' && m !== 'arrived') return;
+    if (m === 'aligned' && this.crossAfter) return;
+    const at = this.where();
+    if (!this.autoAt) {
+      this.autoAt = this.clock + (m === 'arrived' ? AUTO_STAR : m === 'aligned' ? AUTO_HOLD : AUTO_FIRST);
+      return;
+    }
+    if (this.clock < this.autoAt) return;
+    this.autoAt = 0;
+    if (m === 'closed') {
       this.crossAfter = at === 'home' ? 'over' : at === 'star' ? 'back' : null;
       this.turnBridge(1);
-    } else if (this.mech === 'arrived' || (this.mech === 'aligned' && at === 'star')) {
-      this.walkAcross('back');
-    } else if (this.mech === 'aligned') {
-      if (at === 'home') this.walkAcross('over');
-      else this.turnBridge(0);
+    } else if (m === 'arrived' || at === 'star') this.walkAcross('back');
+    else this.turnBridge(0);
+  }
+
+  /** Motion paused: the mechanism straight to where its present movement ends. */
+  private stillMech() {
+    const c = this.world.crossing;
+    const m = this.mech;
+    const goingOver = m === 'crossing' || ((m === 'rotating' || m === 'aligned') && this.crossAfter === 'over');
+    const goingBack = m === 'returning' || ((m === 'rotating' || m === 'aligned') && this.crossAfter === 'back');
+    if (goingOver) this.placeAt(c[c.length - 1], 1, 'arrived');
+    else if (goingBack) this.placeAt(c[0], 0, 'closed');
+    else if (m === 'rotating' || m === 'resetting') {
+      this.bridgeK = this.bridgeFrom = this.bridgeTo;
+      this.mech = this.bridgeTo ? 'aligned' : 'closed';
     }
-    this.kick();
+    this.crossAfter = null;
   }
 
   private placeAt(p: V3 | null, k: number, state: MechState) {
@@ -687,6 +707,7 @@ export class Valley {
     this.bridgeK = this.bridgeFrom = this.bridgeTo = 0;
     this.mech = 'closed';
     this.crossAfter = null;
+    this.autoAt = 0;
   }
 
   private turnBridge(to: number) {
@@ -703,7 +724,6 @@ export class Valley {
     this.turnTo = this.spinAngle - (Math.PI * 2) / 3;
     this.turnT0 = this.clock;
     this.turnDur = dur;
-    this.lastTurn = this.clock + dur;
   }
 
   private walkAcross(way: 'over' | 'back') {
@@ -725,6 +745,8 @@ export class Valley {
         this.bridgeK = this.bridgeTo;
         this.mech = this.bridgeTo ? 'aligned' : 'closed';
         this.mechHold = this.clock;
+        // (down again: a long while before it turns up next)
+        this.autoAt = this.bridgeTo ? 0 : this.clock + AUTO_AGAIN;
       }
       return true;
     }
@@ -742,32 +764,25 @@ export class Valley {
     return m === 'crossing' || m === 'returning' || (m === 'aligned' && !!this.crossAfter);
   }
 
-  /** Tells the page what the wheel would do now, and where it is on the screen. */
+  /** Tells the page what the mechanism is doing. */
   private sendMech() {
     if (!this.onMech) return;
-    const busy = this.mech === 'rotating' || this.mech === 'resetting' || this.mech === 'crossing' || this.mech === 'returning' || (this.mech === 'aligned' && !!this.crossAfter);
     const at = this.where();
-    let action: string | null = null, note = '';
-    if (busy) {
-      action = null;
-      note = this.mech === 'crossing' ? 'Crossing to the star…' : this.mech === 'returning' ? 'Coming back across…' : this.mech === 'resetting' ? 'The bridge goes down.' : 'The bridge turns up.';
-    } else if (this.mech === 'closed') {
-      action = at === 'star' ? 'Raise the bridge, come back' : 'Raise the bridge';
-      note = at === 'home' ? 'Two walks, waiting to meet.' : at === 'star' ? 'On the star, the gap between her and home.' : 'The bridge hangs in its gap.';
-    } else if (this.mech === 'arrived' || (this.mech === 'aligned' && at === 'star')) {
-      action = 'Come back, lower the bridge';
-      note = 'Where the far walk meets the star.';
-    } else if (this.mech === 'aligned') {
-      action = at === 'home' ? 'Cross the bridge' : 'Lower the bridge';
-      note = 'The way is open.';
-    }
-    const settled = this.settled && !this.intro && this.anchors().length > 0;
-    const v = this.view();
-    const knob = settled ? project(v, this.world.bridge.knob) : null;
-    const key = `${this.mech}|${action}|${note}|${knob ? Math.round(knob[0]) + ',' + Math.round(knob[1]) : '-'}`;
+    const m = this.mech;
+    const note =
+      m === 'rotating' ? 'The bridge turns up.'
+      : m === 'resetting' ? 'The bridge goes down.'
+      : m === 'crossing' ? 'Crossing to the star…'
+      : m === 'returning' ? 'Coming back across…'
+      : m === 'arrived' || (m === 'aligned' && at === 'star') ? 'Where the far walk meets the star.'
+      : m === 'aligned' ? 'The way is open.'
+      : at === 'home' ? 'Two walks, waiting to meet.'
+      : at === 'star' ? 'On the star, the gap between her and home.'
+      : 'The bridge hangs in its gap.';
+    const key = `${m}|${note}`;
     if (key === this.mechSent) return;
     this.mechSent = key;
-    this.onMech({ state: this.mech, action: settled ? action : null, note, knob: knob ? { x: knob[0], y: knob[1] } : null });
+    this.onMech({ state: m, note });
   }
 
   /* ── the traveller ── */
@@ -1132,15 +1147,13 @@ export class Valley {
       this.dark += Math.sign(this.darkTo - this.dark) * Math.min(Math.abs(this.darkTo - this.dark), dt / 0.9);
       busy = true;
     }
-    // The mechanism, and the triangle's turns.
+    // The mechanism (working by itself), and the triangle turning with it.
+    this.stepAuto();
     if (this.stepMech()) busy = true;
     {
       const k = (this.clock - this.turnT0) / this.turnDur;
       this.spinAngle = this.turnFrom + (this.turnTo - this.turnFrom) * ease5(k);
       if (k < 1) busy = true;
-      // now and then, when all is still, a third of a turn on its own
-      const still = this.settled && !this.intro && !this.reduced && (this.mech === 'closed' || this.mech === 'arrived' || this.mech === 'aligned');
-      if (still && k >= 1 && this.clock - this.lastTurn > IDLE_TURN_EVERY) this.turnTriangle(IDLE_TURN);
     }
     // Hover fades.
     for (const s of this.world.stations) {
