@@ -85,6 +85,27 @@ export interface Rain {
   slant: number;
 }
 
+/** Things drifting down through a box round a world (snowflakes; petals, tumbling as they fall):
+ * how many, how fast they fall and how far they sway, their size (CSS px), colour and shape. */
+export interface Motes {
+  box: { min: V3; size: V3 };
+  count: number;
+  fall: number;
+  sway: number;
+  px: number;
+  color: RGB;
+  a: number;
+  shape: 'flake' | 'petal';
+}
+
+/** A rainbow in the sky: its centre and radius (CSS px), its width, and how strong. */
+export interface Bow {
+  at: [number, number];
+  r: number;
+  w: number;
+  a: number;
+}
+
 export const MAX_PARTS = 24;
 export const MAX_MATS = 32;
 
@@ -251,10 +272,22 @@ void main() {
 const SKY_FS = /* glsl */ `#version 300 es
 precision highp float;
 ${SKY}
+uniform vec4 uBow;     // a rainbow: its centre (CSS px), radius and width
+uniform float uBowA;
 out vec4 outColor;
+vec3 hue(float h) { return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0); }
 void main() {
   vec2 px = cssPx();
   vec3 c = sky(px);
+  if (uBowA > 0.0) {
+    // A rainbow, soft as chalk: red outside, violet within, fading down towards its feet.
+    float t = (length(px - uBow.xy) - (uBow.z - uBow.w * 0.5)) / uBow.w;
+    if (t > 0.0 && t < 1.0 && px.y < uBow.y) {
+      float a = uBowA * sin(3.14159 * t) * smoothstep(0.0, uBow.z * 0.55, uBow.y - px.y);
+      vec3 b = mix(vec3(1.0), hue(0.78 * (1.0 - t)), 0.55);
+      c = mix(c, b, a);
+    }
+  }
   // A whisper of grain so the gradient never bands.
   float g = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453);
   outColor = vec4(c + (g - 0.5) / 255.0, 1.0);
@@ -323,6 +356,60 @@ out vec4 outColor;
 void main() {
   float a = uRain.a * vA;
   outColor = vec4(uRain.rgb * a, a);
+}`;
+
+// Motes: snowflakes, or petals tumbling, drifting down through a box round a world and swaying as
+// they go, set in it (what stands in front of one hides it).
+const MOTES_VS = /* glsl */ `#version 300 es
+layout(location = 0) in vec4 aSeed;   // xyz in the box (0–1), w: its own pace
+uniform vec3 uBoxMin, uBoxSize;
+uniform float uTime, uFall, uSway, uPx;
+uniform vec2 uRes;
+${CAMERA}
+out float vA;
+out float vSpin;
+out float vSeed;
+void main() {
+  vec3 p = aSeed.xyz;
+  float pace = 0.7 + 0.6 * aSeed.w;
+  p.y = fract(p.y - uTime * uFall * pace / uBoxSize.y);
+  vec3 w = uBoxMin + p * uBoxSize;
+  float ph = aSeed.w * 40.0;
+  w.x += uSway * sin(uTime * (0.55 + 0.5 * aSeed.w) + ph);
+  w.z += uSway * cos(uTime * (0.45 + 0.4 * aSeed.w) + ph * 1.3);
+  gl_Position = clipOf(w, uRes);
+  vA = smoothstep(0.0, 0.2, p.y) * (1.0 - smoothstep(0.85, 1.0, p.y));
+  gl_PointSize = uPx * (0.65 + 0.7 * fract(aSeed.w * 7.31));
+  vSpin = uTime * (0.8 + 1.6 * aSeed.w) + ph;
+  vSeed = aSeed.w;
+}`;
+
+const MOTES_FS = /* glsl */ `#version 300 es
+precision mediump float;
+in float vA;
+in float vSpin;
+in float vSeed;
+uniform vec3 uColor;
+uniform float uAlpha;
+uniform highp int uShape;   // 0: a soft flake; 1: a petal, a little square turning over as it falls
+out vec4 outColor;
+void main() {
+  vec2 q = gl_PointCoord * 2.0 - 1.0;
+  float a;
+  vec3 col = uColor;
+  if (uShape == 1) {
+    float c = cos(vSpin), s = sin(vSpin);
+    q = mat2(c, -s, s, c) * q;
+    float face = abs(cos(vSpin * 0.7));
+    q.x /= max(0.2, face);
+    float d = max(abs(q.x), abs(q.y));
+    a = 1.0 - smoothstep(0.55, 0.75, d);
+    col *= 0.86 + 0.14 * face;
+  } else {
+    a = 1.0 - smoothstep(0.25, 1.0, length(q));
+  }
+  a *= vA * uAlpha * (0.7 + 0.3 * vSeed);
+  outColor = vec4(col * a, a);
 }`;
 
 // Halos and clouds: screen-aligned discs at world points. Halos are added on (light); clouds are
@@ -496,6 +583,9 @@ export class Renderer {
   private beamP: Program;
   private rainP: Program;
   private rainVao: WebGLVertexArrayObject;
+  private motesP: Program;
+  private motesVao: WebGLVertexArrayObject;
+  private motesN: number;
   private rainN: number;
   private dustVao: WebGLVertexArrayObject;
   private dustN: number;
@@ -514,6 +604,7 @@ export class Renderer {
     this.discP = compile(gl, DISC_VS, DISC_FS);
     this.beamP = compile(gl, BEAM_VS, BEAM_FS);
     this.rainP = compile(gl, RAIN_VS, RAIN_FS);
+    this.motesP = compile(gl, MOTES_VS, MOTES_FS);
 
     // Dust seeds.
     this.dustN = 140;
@@ -548,6 +639,18 @@ export class Renderer {
     gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 24, 0);
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 24, 16);
+
+    // Motes: a seed each.
+    this.motesN = 520;
+    const motes = new Float32Array(this.motesN * 4);
+    for (let i = 0; i < motes.length; i++) motes[i] = rnd();
+    this.motesVao = gl.createVertexArray()!;
+    gl.bindVertexArray(this.motesVao);
+    const mb = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, mb);
+    gl.bufferData(gl.ARRAY_BUFFER, motes, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, 0);
 
     this.disc = stream(gl, [3, 2, 2, 3]);
     this.beam = stream(gl, [3, 2, 4]);
@@ -615,6 +718,10 @@ export class Renderer {
     puffs?: Puff[];
     rain?: Rain | null;
     ripples?: Ripple[];
+    motes?: Motes[];
+    bow?: Bow | null;
+    /** Clouds far off in the sky, behind everything. */
+    skyPuffs?: Puff[];
     time: number;
     dust: number;
     /** How much lighter than the sky the mist is. */
@@ -622,6 +729,26 @@ export class Renderer {
   }) {
     const { gl } = this;
     const { w, h, dpr, view, pal } = o;
+    const discs = (list: { at: V3; r: number; a: number; color: RGB }[], shape: number) => {
+      if (!list.length) return;
+      const v = new Float32Array(list.length * 6 * this.disc.floats);
+      let k = 0;
+      for (const g of list) {
+        for (const [cx, cy] of CORNERS) {
+          v.set([g.at[0], g.at[1], g.at[2], cx, cy, g.r, g.a, g.color[0], g.color[1], g.color[2]], k);
+          k += this.disc.floats;
+        }
+      }
+      if (shape) gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      else gl.blendFunc(gl.ONE, gl.ONE);
+      gl.useProgram(this.discP.p);
+      this.common(this.discP, w, h, dpr, view, pal);
+      gl.uniform1i(this.discP.u('uShape'), shape);
+      gl.bindVertexArray(this.disc.vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.disc.buf);
+      gl.bufferData(gl.ARRAY_BUFFER, v, gl.DYNAMIC_DRAW);
+      gl.drawArrays(gl.TRIANGLES, 0, list.length * 6);
+    };
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.disable(gl.CULL_FACE);
 
@@ -630,6 +757,9 @@ export class Renderer {
     gl.disable(gl.BLEND);
     gl.useProgram(this.skyP.p);
     this.common(this.skyP, w, h, dpr, view, pal);
+    const bow = o.bow;
+    gl.uniform4f(this.skyP.u('uBow'), bow?.at[0] ?? 0, bow?.at[1] ?? 0, bow?.r ?? 1, bow?.w ?? 1);
+    gl.uniform1f(this.skyP.u('uBowA'), bow && bow.a > 0.004 ? bow.a : 0);
     gl.bindVertexArray(this.emptyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
@@ -646,6 +776,14 @@ export class Renderer {
       gl.uniform3fv(this.dustP.u('uDust'), pal.dust.map((c) => c * o.dust));
       gl.bindVertexArray(this.dustVao);
       gl.drawArrays(gl.POINTS, 0, this.dustN);
+      gl.disable(gl.BLEND);
+    }
+
+    // Clouds far off in the sky, behind everything.
+    const far = (o.skyPuffs ?? []).filter((p) => p.a > 0.004);
+    if (far.length) {
+      gl.enable(gl.BLEND);
+      discs(far, 1);
       gl.disable(gl.BLEND);
     }
 
@@ -742,26 +880,24 @@ export class Renderer {
       gl.bindVertexArray(this.rainVao);
       gl.drawArrays(gl.TRIANGLES, 0, this.rainN * 6);
     }
-    const discs = (list: { at: V3; r: number; a: number; color: RGB }[], shape: number) => {
-      if (!list.length) return;
-      const v = new Float32Array(list.length * 6 * this.disc.floats);
-      let k = 0;
-      for (const g of list) {
-        for (const [cx, cy] of CORNERS) {
-          v.set([g.at[0], g.at[1], g.at[2], cx, cy, g.r, g.a, g.color[0], g.color[1], g.color[2]], k);
-          k += this.disc.floats;
-        }
-      }
-      if (shape) gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-      else gl.blendFunc(gl.ONE, gl.ONE);
-      gl.useProgram(this.discP.p);
-      this.common(this.discP, w, h, dpr, view, pal);
-      gl.uniform1i(this.discP.u('uShape'), shape);
-      gl.bindVertexArray(this.disc.vao);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.disc.buf);
-      gl.bufferData(gl.ARRAY_BUFFER, v, gl.DYNAMIC_DRAW);
-      gl.drawArrays(gl.TRIANGLES, 0, list.length * 6);
-    };
+    // Snow and petals, set in the scene.
+    for (const mo of o.motes ?? []) {
+      if (mo.a <= 0.004 || mo.count <= 0) continue;
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.useProgram(this.motesP.p);
+      this.common(this.motesP, w, h, dpr, view, pal);
+      gl.uniform3fv(this.motesP.u('uBoxMin'), mo.box.min);
+      gl.uniform3fv(this.motesP.u('uBoxSize'), mo.box.size);
+      gl.uniform1f(this.motesP.u('uTime'), o.time);
+      gl.uniform1f(this.motesP.u('uFall'), mo.fall);
+      gl.uniform1f(this.motesP.u('uSway'), mo.sway);
+      gl.uniform1f(this.motesP.u('uPx'), mo.px * dpr);
+      gl.uniform3fv(this.motesP.u('uColor'), mo.color);
+      gl.uniform1f(this.motesP.u('uAlpha'), mo.a);
+      gl.uniform1i(this.motesP.u('uShape'), mo.shape === 'petal' ? 1 : 0);
+      gl.bindVertexArray(this.motesVao);
+      gl.drawArrays(gl.POINTS, 0, Math.min(this.motesN, Math.round(mo.count)));
+    }
     // Ripples on still water (set in the scene: what stands in front hides them); then halos (added
     // on) and clouds (laid over).
     discs((o.ripples ?? []).filter((r) => r.a > 0.004), 2);

@@ -23,7 +23,15 @@ Kelvin Tang's personal homepage: one impossible building floating in the mist, i
   - Contact: the pavilion leads to **the Violet Tree**, a long violet aqueduct on arches with a lower walk and stairs. A door pours a beam of light up a wave of a ramp, golden rings turn over it, and a tree of pink cubes breathes on a slender round column out in front. The aqueduct goes on to the left to a domed round tower, past another tree and a lilac rotunda.
 
   Every world reaches across the whole page: its building is framed beside the panel, and the rest of it stands off in the haze behind the frosted panel (behind the words, on the overview, a far city of towers, a rotunda and a shrine). The panel rises beside the building. Moving between sections, the traveller goes in through her door (or the mist takes her with her world), that world's lights go out and the mist gathers over it, the low parts first, the tops last. When it parts again, the next world is simply there: the mist clears from the top down and lingers low, its edge ragged and drifting, while a bank of cloud over the world's place thins and drifts apart. Nothing is built before the eye, and nothing comes out of nowhere. The mist is part of the scene, not a curtain over the page: each building is drawn with its own depth in it. She comes out of the new world's door as it clears. She walks on two feet, step by step with the ground she covers. Lights come on only once the mist has cleared, opening out from their source; the beam of light pours out of its door and reaches up the ramp.
-- **Weather, fitted to the worlds.** Rain falls on the Lotus Palace, by day and by dusk: thin streaks that pass behind the towers, and rings spreading on the lotus pool where the drops land. At dusk, shooting stars cross the sky now and then, far behind the great building and the Moonlit Ruins (what stands in front of them hides them). Pausing motion stops the weather. The traveller keeps her feet on whatever is under her (each stair step, the curve of a ramp), and `npm run check:walks` sweeps her body along every walk.
+- **Weather, fitted to each world.** It is set in the scene like everything else: what stands in front of it hides it.
+  - Over the great building, clouds drift slowly across the sky, far behind it. At dusk, shooting stars cross now and then.
+  - On the Lotus Palace it rains: thin streaks pass behind the towers, and rings spread on the lotus pool where the drops land.
+  - On the Moonlit Ruins it snows, and at dusk shooting stars cross over them.
+  - In the Amber Sky, the low sun's light falls in broad soft shafts through the orange air.
+  - Over the Penrose Stair, the stair that climbs for ever, stands a faint chalky rainbow.
+  - From the Violet Tree, its pink cubes drift down, turning over as they fall.
+
+  The weather shows only where a world shows through the mist. Pausing motion stops what moves; the rainbow, the clouds and the light stay, still. The traveller keeps her feet on whatever is under her (each stair step, the curve of a ramp), and `npm run check:walks` sweeps her body along every walk.
 - **A short entrance, and an opening on request.** The page itself opens in a few seconds: the mist parts from the monument and the traveller steps out. The full opening (about fourteen seconds, after Monument Valley's) plays from *Replay the opening* at the foot of the page or with `?intro`. A chapter card (*Ⅰ · A Quiet Valley*) comes in letter by letter over a bank of cloud. Then the world turns a quarter round into its isometric angle as the camera draws back, and the mist parts from it as it turns: the towers' domes first, the triangle high over the star, then the walls and the stairs, till only the mist below is left. The five places light up one by one, the traveller steps out of her door, the monument glides aside and the page comes in. Any key or tap skips it.
 - **Research** is an index of papers. Each paper has its own page at `#research/<slug>`; with none yet, the index reads *Unlocked*.
 - **Projects** follow GitHub visibility. Only public repositories are listed: one made private drops out, one made public appears. The build carries a snapshot, and opening the section asks GitHub for the current list (cached for ten minutes).
@@ -80,7 +88,15 @@ Kelvin Tang 的个人主页：一座悬浮在雾中的不可能建筑，致敬�
   - Contact：亭子，通往**紫罗兰之树**：长长的紫色拱桥水道，带下层步道和阶梯；一扇门把光束洒上波浪形的坡道，金色圆环在上方旋转，前方细圆柱上一棵粉色方块组成的树在轻轻呼吸。水道向左延伸到一座穹顶圆塔，途经另一棵树和一座淡紫色圆亭。
 
   每个世界都铺满整个页面：建筑本身被框在面板旁边，其余部分立在磨砂面板后面的薄雾里（首页的文字后面则是一座远方的城：塔、圆亭和神龛）。面板在建筑旁升起。在板块之间切换时，旅人从她的门走进去（或随她的世界一起被迷雾带走），这个世界先熄灯，迷雾从低处开始聚拢，最后漫过顶端。迷雾再散开时，下一个世界就已经在那里：雾从上往下散去，低处还留着一层，边缘参差地飘动，罩在它上方的云团也渐渐变薄、向四周散开。没有任何东西在眼前被一块块搭起来，也没有东西凭空冒出。迷雾是场景的一部分，而不是盖在页面上的一层幕：每座建筑都按自己在雾中的深浅来绘制。雾散时她从新世界的门里走出。她用两只脚走路，步子跟着走过的地面一步一步迈出。灯光要等雾散了才亮，从光源处向外展开；门里的光束会沿坡道一路照出去。
-- **因世界而异的天气。** 莲花宫里下着雨，白昼和暮色都有：细细的雨丝会从塔楼后面落下，雨点落在莲池上，一圈圈涟漪荡开。暮色时，大建筑和月下废墟的天空里不时划过流星，它们在很远的天上，被前面的建筑挡住。暂停动画时天气也会停下。旅人的脚始终踩在脚下的东西上（每一级台阶、坡道的弧面），`npm run check:walks` 会沿每条路线检查她的身体有没有穿过任何东西。
+- **每个世界都有自己的天气。** 天气和其他东西一样画在场景里，被前面的建筑挡住。
+  - 大建筑：天上的云在它身后很远处缓缓飘过；暮色时不时划过流星。
+  - 莲花宫：下雨。雨丝从塔楼后面落下，雨点落在莲池上，一圈圈涟漪荡开。
+  - 月下废墟：下雪；暮色时也有流星划过。
+  - 琥珀天空：低垂的夕阳在橙色的空气里投下宽而柔和的光柱。
+  - 彭罗斯阶梯：那道永远向上的阶梯上方，挂着一道淡淡的、粉笔画似的彩虹。
+  - 紫罗兰之树：粉色的方块从树上飘落，一边落一边翻转。
+
+  天气只在世界从雾中露出来的地方出现。暂停动画时，会动的天气停下；彩虹、云和光柱静静地留着。旅人的脚始终踩在脚下的东西上（每一级台阶、坡道的弧面），`npm run check:walks` 会沿每条路线检查她的身体有没有穿过任何东西。
 - **简短的入场，完整的开场随时可看。** 打开页面只需几秒：迷雾从纪念碑上散开，旅人从门里走出。完整的开场（约 14 秒，仿照《纪念碑谷》）可以点页面底部的 *Replay the opening*，或在网址后加 `?intro` 观看。云海之上，章节卡（*Ⅰ · A Quiet Valley*）一个字母一个字母地浮现。随后整个世界旋转四分之一圈，转到等距视角，镜头缓缓拉远，迷雾随着转动散开：先露出塔楼的穹顶和高悬在八角星上的三角，再是环墙和阶梯，最后只剩下方的一层雾。五处地点依次亮起，旅人从门里走出，纪念碑滑到一旁，页面淡入。按任意键或轻触即可跳过。
 - **Research** 是论文索引。每篇论文有自己的页面（`#research/<slug>`）；还没有论文时，列表只显示 *Unlocked*。
 - **Projects** 与 GitHub 仓库的可见性同步。只列出公开仓库：设为私有就消失，设为公开就出现。构建时带一份快照，打开板块时再向 GitHub 取一次当前列表（缓存 10 分钟）。

@@ -1,8 +1,9 @@
 // Behind each door, a world of its own (after Monument Valley's levels, each in its own light; the
 // colours are in src/palettes.ts). Opening a section, the traveller walks in through its door on the
 // great building and the mist gathers over it; when the mist parts, this one stands there and she
-// steps out of its door. Some have weather of their own: rain on the Lotus Palace's pool, shooting
-// stars over the Moonlit Ruins by night.
+// steps out of its door. Each has weather of its own: rain on the Lotus Palace's pool, snow (and by
+// night shooting stars) on the Moonlit Ruins, the low sun's shafts in the Amber Sky, a rainbow over the
+// Penrose Stair, the Violet Tree's cubes drifting down.
 //   About     — the Lotus Palace: pagoda towers, a pool with a lotus, rooms cut open in the walls
 //   Research  — the Moonlit Ruins: an arcade broken off in steps, a window still full of night, a
 //               stair into the sky, stones stopped in the air as they fell
@@ -48,6 +49,12 @@ export interface Room {
    * sky by night. */
   rain?: { pools: { y: number; x: [number, number]; z: [number, number] }[] };
   stars?: boolean;
+  /** Snow falling through it; petals drifting down from a tree (the box they fall through); a
+   * rainbow over it; the low sun's light falling in shafts through its sky. */
+  snow?: boolean;
+  petals?: { min: V3; max: V3 };
+  bow?: boolean;
+  rays?: boolean;
 }
 
 const easeOut = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.pow(1 - t, 3));
@@ -593,7 +600,8 @@ function moonRuins(): Room {
     pivots,
     parts: 14,
     distant: { 9: 0.24, 10: 0.42, 11: 0.36, 12: 0.3, 13: 0.12 },
-    // (a night world: shooting stars over the ruins)
+    // (snow on the ruins; by night, shooting stars over them too)
+    snow: true,
     stars: true,
     walk: [[LX1 + 0.05, 0, -3.65], [-5.0, 0, -3.65], [-3.3, 0, -1.7], [-2.1, 0, -0.35]],
     glows: [
@@ -793,6 +801,8 @@ function amberSky(): Room {
     id: 'projects',
     mesh: new Float32Array(m.data),
     solids: m.solids(),
+    // (the low sun's light in shafts through the amber sky)
+    rays: true,
     culledFrom,
     pivots,
     parts: 13,
@@ -1028,6 +1038,8 @@ function penroseStair(): Room {
     id: 'activity',
     mesh: new Float32Array(m.data),
     solids: m.solids(),
+    // (a rainbow over the stair that climbs for ever)
+    bow: true,
     pivots,
     parts: 14,
     distant: { 10: 0.22, 11: 0.38, 12: 0.32, 13: 0.3 },
@@ -1246,6 +1258,8 @@ function violetTree(): Room {
     id: 'contact',
     mesh: new Float32Array(m.data),
     solids: m.solids(),
+    // (its pink cubes drifting down from the tree, turning over as they fall)
+    petals: { min: [TX - 2.6, 0.5, TZ - 1.8], max: [TX + 2.6, TT + 3.2, TZ + 2.8] },
     pivots,
     parts: 19,
     distant: { 15: 0.18, 16: 0.3, 17: 0.36, 18: 0.3 },
