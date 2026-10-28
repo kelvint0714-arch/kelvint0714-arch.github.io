@@ -7,9 +7,9 @@
 
 import type { V3 } from './geometry';
 import { along, groundTrack, heightAt, isJump, pathLength, wallBehind } from './ground';
-import { buildFigure } from './kit';
+import { buildFigure, M } from './kit';
 import { blend, roomPalette, skyMix } from './palettes';
-import { MAX_PARTS, project, Renderer, unproject, type Beam, type Glow, type Layer, type Model, type Palette, type Puff, type Rain, type RGB, type Ripple, type View } from './renderer';
+import { MAX_PARTS, project, Renderer, unproject, type Beam, type Glow, type Bow, type Layer, type Model, type Motes, type Palette, type Puff, type Rain, type RGB, type Ripple, type View } from './renderer';
 import { buildRooms, type Pose, type Room } from './rooms';
 import { buildWorld, P, PART_COUNT, PENROSE, type World } from './world';
 
@@ -436,19 +436,22 @@ export class Valley {
     const t = this.reduced ? 0 : this.clock;
     const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
     const size = Math.max(box.w, box.h);
-    const n = 4;
+    // (it lies wider than the world, so no edge of it runs along the world's own)
+    const bx = box.x - box.w * 0.15, by = box.y - box.h * 0.12, bw = box.w * 1.3, bh = box.h * 1.24;
+    const n = 5;
     const out: Puff[] = [];
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
         const k = i * n + j + seed;
         const jx = Math.sin(k * 12.9898) * 0.5, jy = Math.sin(k * 78.233) * 0.5;
-        let x = box.x + box.w * ((i + 0.5 + jx * 0.6) / n);
-        let y = box.y + box.h * ((j + 0.5 + jy * 0.6) / n);
-        const apart = (1 - m) * 0.7;
+        let x = bx + bw * ((i + 0.5 + jx * 0.6) / n);
+        let y = by + bh * ((j + 0.5 + jy * 0.6) / n);
+        // parting from the middle outward as it thins
+        const apart = (1 - m) * 0.8;
         x += (x - cx) * apart + Math.sin(t * 0.25 + k) * size * 0.012;
         y += (y - cy) * apart * 0.5 + (1 - m) * size * 0.06;
-        const r = size * (0.19 + 0.05 * (k % 3));
-        out.push({ at: unproject(v, x, y), r: r / v.scale, color, a: 0.9 * Math.pow(m, 1.4) });
+        const r = size * (0.17 + 0.05 * (k % 3));
+        out.push({ at: unproject(v, x, y), r: r / v.scale, color, a: 0.92 * Math.pow(m, 1.1) });
       }
     }
     return out;
@@ -950,6 +953,114 @@ export class Valley {
     return out;
   }
 
+  /** Snow falling through a world, a soft flake each; or a tree's petals drifting down, turning over
+   * as they fall (none with motion paused). */
+  private motesOf(st: Stage, weight: number): Motes[] {
+    const room = st.def.room;
+    if (!room || this.reduced || weight <= 0.004) return [];
+    const out: Motes[] = [];
+    if (room.snow) {
+      const { min, max } = st.def.bounds;
+      out.push({
+        box: { min: [min[0] - 1.5, min[1], min[2] - 1.5], size: [max[0] - min[0] + 3, max[1] - min[1] + 4, max[2] - min[2] + 3] },
+        count: 420,
+        fall: 0.8,
+        sway: 0.3,
+        px: 4.4,
+        color: [1, 1, 1],
+        a: 0.9 * weight,
+        shape: 'flake',
+      });
+    }
+    if (room.petals) {
+      const { min, max } = room.petals;
+      const pal = st.layer.pal ?? st.def.pal(this.dark);
+      out.push({
+        box: { min, size: [max[0] - min[0], max[1] - min[1], max[2] - min[2]] },
+        count: 46,
+        fall: 0.45,
+        sway: 0.6,
+        px: 9.5,
+        color: pal.mats[M.petal].top,
+        a: weight,
+        shape: 'petal',
+      });
+    }
+    return out;
+  }
+
+  /** A rainbow over a world, soft as chalk (paler at dusk). */
+  private bowOf(st: Stage, weight: number, v: View): Bow | null {
+    if (!st.def.room?.bow || weight <= 0.004) return null;
+    const box = this.stageBox(st.def, v);
+    const size = Math.max(box.w, box.h);
+    return { at: [box.x + box.w * 0.5, box.y + box.h * 0.95], r: size * 0.66, w: size * 0.075, a: 0.34 * (1 - 0.75 * this.dark) * weight };
+  }
+
+  /** The low sun's light falling in shafts from the sky's bright heart, slowly turning (far behind
+   * everything: what stands in front hides it). */
+  private raysOf(st: Stage, weight: number, v: View): Beam[] {
+    if (!st.def.room?.rays || weight <= 0.004) return [];
+    const pal = st.layer.pal ?? st.def.pal(this.dark);
+    const sun: [number, number] = [pal.skyAt[0] * this.w, pal.skyAt[1] * this.h];
+    const t = this.reduced ? 0 : this.clock;
+    const len = Math.max(this.w, this.h) * 0.95;
+    const far = (x: number, y: number): V3 => {
+      const p = unproject(v, x, y);
+      return [p[0] - 40, p[1] - 40, p[2] - 40];
+    };
+    const out: Beam[] = [];
+    for (let i = 0; i < 5; i++) {
+      // (broad and soft, beginning a little way out from the sun: shafts of light, not a starburst)
+      const ang = (0.42 + 0.115 * i + 0.015 * Math.sin(t * 0.11 + i * 1.7)) * Math.PI;
+      const d: [number, number] = [Math.cos(ang), Math.sin(ang)];
+      const n: [number, number] = [-d[1], d[0]];
+      const from: [number, number] = [sun[0] + d[0] * len * 0.08, sun[1] + d[1] * len * 0.08];
+      const end: [number, number] = [sun[0] + d[0] * len, sun[1] + d[1] * len];
+      const w0 = len * 0.03, w1 = len * (0.14 + 0.06 * (i % 3));
+      const at = (p: [number, number], half: number, side: number) => far(p[0] + n[0] * half * side, p[1] + n[1] * half * side);
+      out.push({
+        quad: [at(from, w0, -1), at(from, w0, 1), at(end, w1, 1), at(end, w1, -1)],
+        color: [1, 0.94, 0.8],
+        a: (0.085 + 0.035 * Math.sin(t * 0.37 + i * 2.1)) * (1 - 0.6 * this.dark) * weight,
+      });
+    }
+    return out;
+  }
+
+  /** Clouds drifting slowly across the great building's sky, far behind it (dimmer at dusk). */
+  private skyCloudsOf(st: Stage, weight: number, v: View): Puff[] {
+    if (st.def.room || this.intro || weight <= 0.004) return [];
+    const box = this.stageBox(st.def, v);
+    const size = Math.max(box.w, box.h);
+    const t = this.reduced ? 0 : this.clock;
+    const pal = st.layer.pal ?? st.def.pal(this.dark);
+    const k = 0.7 - 0.45 * this.dark;
+    const color = pal.skyIn.map((c) => lerp(c, 1, k)) as RGB;
+    // (a shade under each, so a white cloud still shows in a pale sky)
+    const belly = pal.skyOut.map((c) => c * (0.93 + 0.05 * this.dark)) as RGB;
+    const span = box.w + size * 0.9;
+    const out: Puff[] = [];
+    for (let i = 0; i < 5; i++) {
+      const speed = size * (0.007 + 0.004 * (i % 3));
+      const u = (((i * 0.37 + 0.11) * span + t * speed) % span) / span;
+      const a = (0.8 - 0.45 * this.dark) * clamp01(u / 0.15) * clamp01((1 - u) / 0.15) * weight;
+      const x = box.x - size * 0.45 + u * span;
+      const y = box.y + box.h * (0.06 + 0.2 * i);
+      for (let j = 0; j < 2; j++) {
+        const px = x + (j - 0.5) * size * 0.09;
+        out.push({ at: unproject(v, px, y + size * 0.018), r: (size * 0.05) / v.scale, color: belly, a: a * 0.45 });
+      }
+      for (let j = 0; j < 4; j++) {
+        const r = size * (0.045 + 0.018 * ((i + j) % 3));
+        const px = x + (j - 1.5) * size * 0.055;
+        const py = y - Math.abs(Math.sin(j * 1.7 + i)) * size * 0.022;
+        out.push({ at: unproject(v, px, py), r: r / v.scale, color, a });
+      }
+    }
+    return out;
+  }
+
   /** The rings rain makes on a world's still water: each drop's ring spreads and is gone. */
   private ripplesOf(st: Stage, weight: number): Ripple[] {
     const pools = st.def.room?.rain?.pools;
@@ -1067,6 +1178,7 @@ export class Valley {
     const alpha = this.figAlpha;
     this.figLayer.mist = st ? this.mistOf(st) : 0;
     this.figLayer.mistY = st ? st.def.mistY : undefined;
+    this.figLayer.mistColor = st?.layer.mistColor;
     const c = Math.cos(this.figYaw), s = Math.sin(this.figYaw);
     const f = this.fig;
     const at = (fwd: number, up: number, body: number): number[] => [
@@ -1187,6 +1299,9 @@ export class Valley {
     const puffs: Puff[] = [];
     const ripples: Ripple[] = [];
     let rain: Rain | null = null;
+    const motes: Motes[] = [];
+    let bow: Bow | null = null;
+    const skyPuffs: Puff[] = [];
     const v0 = this.view();
     for (const st of [this.leaving, this.next ? null : this.stage]) {
       if (!st) continue;
@@ -1196,7 +1311,8 @@ export class Valley {
       const m = this.mistOf(st);
       st.layer.mist = m;
       st.layer.mistY = st.def.mistY;
-      if (!(this.intro && st === this.stage)) puffs.push(...this.bank(this.stageBox(st.def, v0), m, this.mistColor(st.layer.pal), st === this.leaving ? 0 : 5));
+      st.layer.mistColor = this.mistColor(st.layer.pal);
+      if (!(this.intro && st === this.stage)) puffs.push(...this.bank(this.stageBox(st.def, v0), m, st.layer.mistColor, st === this.leaving ? 0 : 5));
       layers.push(st.layer);
       // (its lights go out first, before the mist gathers)
       const fading = st.dies < Infinity ? 1 - clamp01((this.clock - st.dies + 0.25) / 0.35) : 1;
@@ -1213,6 +1329,10 @@ export class Valley {
       rain = this.rainOf(st, clear) ?? rain;
       ripples.push(...this.ripplesOf(st, clear));
       beams.push(...this.shootingStars(st, clear, v0));
+      motes.push(...this.motesOf(st, clear));
+      bow = this.bowOf(st, clear, v0) ?? bow;
+      beams.push(...this.raysOf(st, clear, v0));
+      skyPuffs.push(...this.skyCloudsOf(st, clear, v0));
       const room = st.def.room;
       if (room) {
         const since = this.clock - st.born;
@@ -1258,6 +1378,9 @@ export class Valley {
       puffs,
       rain,
       ripples,
+      motes,
+      bow,
+      skyPuffs,
       time: this.reduced ? 20 : this.clock,
       dust: this.intro ? clamp01((this.clock - this.stage.born) / 2) : 1,
     });
