@@ -436,19 +436,22 @@ export class Valley {
     const t = this.reduced ? 0 : this.clock;
     const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
     const size = Math.max(box.w, box.h);
-    const n = 4;
+    // (it lies wider than the world, so no edge of it runs along the world's own)
+    const bx = box.x - box.w * 0.15, by = box.y - box.h * 0.12, bw = box.w * 1.3, bh = box.h * 1.24;
+    const n = 5;
     const out: Puff[] = [];
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
         const k = i * n + j + seed;
         const jx = Math.sin(k * 12.9898) * 0.5, jy = Math.sin(k * 78.233) * 0.5;
-        let x = box.x + box.w * ((i + 0.5 + jx * 0.6) / n);
-        let y = box.y + box.h * ((j + 0.5 + jy * 0.6) / n);
-        const apart = (1 - m) * 0.7;
+        let x = bx + bw * ((i + 0.5 + jx * 0.6) / n);
+        let y = by + bh * ((j + 0.5 + jy * 0.6) / n);
+        // parting from the middle outward as it thins
+        const apart = (1 - m) * 0.8;
         x += (x - cx) * apart + Math.sin(t * 0.25 + k) * size * 0.012;
         y += (y - cy) * apart * 0.5 + (1 - m) * size * 0.06;
-        const r = size * (0.19 + 0.05 * (k % 3));
-        out.push({ at: unproject(v, x, y), r: r / v.scale, color, a: 0.9 * Math.pow(m, 1.4) });
+        const r = size * (0.17 + 0.05 * (k % 3));
+        out.push({ at: unproject(v, x, y), r: r / v.scale, color, a: 0.92 * Math.pow(m, 1.1) });
       }
     }
     return out;
@@ -1175,6 +1178,7 @@ export class Valley {
     const alpha = this.figAlpha;
     this.figLayer.mist = st ? this.mistOf(st) : 0;
     this.figLayer.mistY = st ? st.def.mistY : undefined;
+    this.figLayer.mistColor = st?.layer.mistColor;
     const c = Math.cos(this.figYaw), s = Math.sin(this.figYaw);
     const f = this.fig;
     const at = (fwd: number, up: number, body: number): number[] => [
@@ -1307,7 +1311,8 @@ export class Valley {
       const m = this.mistOf(st);
       st.layer.mist = m;
       st.layer.mistY = st.def.mistY;
-      if (!(this.intro && st === this.stage)) puffs.push(...this.bank(this.stageBox(st.def, v0), m, this.mistColor(st.layer.pal), st === this.leaving ? 0 : 5));
+      st.layer.mistColor = this.mistColor(st.layer.pal);
+      if (!(this.intro && st === this.stage)) puffs.push(...this.bank(this.stageBox(st.def, v0), m, st.layer.mistColor, st === this.leaving ? 0 : 5));
       layers.push(st.layer);
       // (its lights go out first, before the mist gathers)
       const fading = st.dies < Infinity ? 1 - clamp01((this.clock - st.dies + 0.25) / 0.35) : 1;

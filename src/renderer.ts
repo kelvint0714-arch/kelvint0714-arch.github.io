@@ -200,17 +200,35 @@ uniform vec3 uGlow;
 uniform int uPass;   // 0: whole pieces; 1, 2: pieces half there (depth first, then colour, see-through)
 uniform float uMist;     // how deep this building is in the mist: 0 clear … 1 lost in it
 uniform vec2 uMistY;     // its lowest and highest points (the mist lies low: tops come out first)
-uniform float uMistLight;
+uniform vec3 uMistColor; // the mist's own colour (the same as the bank of cloud over it)
 uniform float uTime;
 ${SKY}
 out vec4 outColor;
-float hash3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+// (a hash without sin: sin of a large number loses its precision on some GPUs, and the mist's noise
+// would break into blocks the longer the page is open)
+float hash3(vec3 p) {
+  p = fract(p * 0.1031);
+  p += dot(p, p.zyx + 31.32);
+  return fract((p.x + p.y) * p.z);
+}
 float noise3(vec3 p) {
   vec3 i = floor(p), f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
+  f = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
   float a = mix(mix(hash3(i), hash3(i + vec3(1, 0, 0)), f.x), mix(hash3(i + vec3(0, 1, 0)), hash3(i + vec3(1, 1, 0)), f.x), f.y);
   float b = mix(mix(hash3(i + vec3(0, 0, 1)), hash3(i + vec3(1, 0, 1)), f.x), mix(hash3(i + vec3(0, 1, 1)), hash3(i + vec3(1, 1, 1)), f.x), f.y);
   return mix(a, b, f.z);
+}
+// Three octaves, each turned off the last (so no grid of the noise lines up with the buildings').
+const mat3 TURN = mat3(0.00, 0.80, 0.60, -0.80, 0.36, -0.48, -0.60, -0.48, 0.64);
+float drift3(vec3 p) {
+  float a = 0.0, w = 0.5;
+  for (int i = 0; i < 3; i++) {
+    p = TURN * p;
+    a += w * noise3(p);
+    p = p * 2.03 + 11.7;
+    w *= 0.5;
+  }
+  return a / 0.875;
 }
 void main() {
   vec4 pf = uPartFx[vPart];
@@ -251,14 +269,17 @@ void main() {
     // (and go into it last), its edge ragged. Deep in it is only the sky; along its edge, a lighter
     // breath of mist.
     float h = clamp((vW.y - uMistY.x) / max(1.0, uMistY.y - uMistY.x), 0.0, 1.0);
-    vec3 q = vW * 0.42 + vec3(uTime * 0.11, -uTime * 0.04, uTime * 0.07);
-    float n = 0.62 * noise3(q) + 0.38 * noise3(q * 2.1 + 7.3);
+    float t = mod(uTime, 1000.0);
+    float n = drift3(vW * 0.36 + vec3(t * 0.09, -t * 0.035, t * 0.06));
     float field = 0.6 * h + 0.4 * n;
-    float m = uMist * 1.4 - 0.2;
-    float dd = m - field;
-    float k = smoothstep(-0.02, 0.2, dd);
-    float lift = uMistLight * (1.0 - smoothstep(0.12, 0.55, dd)) * (1.0 - smoothstep(0.85, 1.0, uMist));
-    c = mix(c, mix(bg, vec3(1.0), lift), k);
+    float m = uMist * 1.6 - 0.3;
+    float k = smoothstep(-0.08, 0.3, m - field);
+    // (along its edge the mist is the colour of the bank of cloud lying over it; deeper in, only the
+    // sky shows, so nothing of the building's shape shows through the bank)
+    vec3 haze = mix(uMistColor, bg, smoothstep(0.08, 0.42, m - field));
+    c = mix(c, haze, k);
+    // a breath of dither, so its soft gradients never band
+    c += (fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5) / 255.0;
   }
   outColor = vec4(c, uPass == 0 ? 1.0 : pf.x);
 }`;
@@ -367,7 +388,7 @@ uniform float uTime, uFall, uSway, uPx;
 uniform vec2 uRes;
 ${CAMERA}
 out float vA;
-out float vSpin;
+out vec3 vTurn;   // its turn: cos, sin, and how much of its face shows
 out float vSeed;
 void main() {
   vec3 p = aSeed.xyz;
@@ -380,14 +401,15 @@ void main() {
   gl_Position = clipOf(w, uRes);
   vA = smoothstep(0.0, 0.2, p.y) * (1.0 - smoothstep(0.85, 1.0, p.y));
   gl_PointSize = uPx * (0.65 + 0.7 * fract(aSeed.w * 7.31));
-  vSpin = uTime * (0.8 + 1.6 * aSeed.w) + ph;
+  float spin = mod(uTime * (0.8 + 1.6 * aSeed.w) + ph, 6.2831853 * 20.0);
+  vTurn = vec3(cos(spin), sin(spin), abs(cos(spin * 0.7)));
   vSeed = aSeed.w;
 }`;
 
 const MOTES_FS = /* glsl */ `#version 300 es
 precision mediump float;
 in float vA;
-in float vSpin;
+in vec3 vTurn;
 in float vSeed;
 uniform vec3 uColor;
 uniform float uAlpha;
@@ -398,9 +420,8 @@ void main() {
   float a;
   vec3 col = uColor;
   if (uShape == 1) {
-    float c = cos(vSpin), s = sin(vSpin);
-    q = mat2(c, -s, s, c) * q;
-    float face = abs(cos(vSpin * 0.7));
+    q = mat2(vTurn.x, -vTurn.y, vTurn.y, vTurn.x) * q;
+    float face = vTurn.z;
     q.x /= max(0.2, face);
     float d = max(abs(q.x), abs(q.y));
     a = 1.0 - smoothstep(0.55, 0.75, d);
@@ -481,7 +502,7 @@ const BEAM_FS = /* glsl */ `#version 300 es
 precision mediump float;
 in vec2 vUv;
 in vec4 vColor;
-uniform float uTime;
+uniform highp float uTime;
 out vec4 outColor;
 void main() {
   float x = (vUv.x - 0.5) / 0.5;
@@ -489,7 +510,8 @@ void main() {
   // easing in at its source, fading out towards its far end
   float along = smoothstep(0.0, 0.07, vUv.y) * pow(1.0 - vUv.y, 1.25);
   // motes of light drifting along it
-  float drift = 0.88 + 0.12 * sin(vUv.y * 22.0 - uTime * 1.7 + sin(vUv.x * 9.0 + uTime * 0.6) * 1.5);
+  highp float tt = uTime;
+  float drift = 0.88 + 0.12 * sin(vUv.y * 22.0 - tt * 1.7 + sin(vUv.x * 9.0 + tt * 0.6) * 1.5);
   float a = (core * 0.75 + halo * 0.35) * along * drift * vColor.a;
   outColor = vec4(vColor.rgb * a, 0.0);
 }`;
@@ -525,9 +547,10 @@ export interface Layer {
   parts: Float32Array;
   partFx: Float32Array;
   pal?: Palette;
-  /** How deep in the mist it stands (0: clear), and its lowest and highest points. */
+  /** How deep in the mist it stands (0: clear), its lowest and highest points, and the mist's colour. */
   mist?: number;
   mistY?: [number, number];
+  mistColor?: RGB;
 }
 
 function compile(gl: WebGL2RenderingContext, vs: string, fs: string) {
@@ -724,8 +747,6 @@ export class Renderer {
     skyPuffs?: Puff[];
     time: number;
     dust: number;
-    /** How much lighter than the sky the mist is. */
-    mistLight?: number;
   }) {
     const { gl } = this;
     const { w, h, dpr, view, pal } = o;
@@ -794,7 +815,6 @@ export class Renderer {
     gl.useProgram(this.mesh.p);
     this.common(this.mesh, w, h, dpr, view, pal);
     gl.uniform1f(this.mesh.u('uTime'), o.time);
-    gl.uniform1f(this.mesh.u('uMistLight'), o.mistLight ?? 0.3);
     let current: Palette | null = null;
     const layer = (l: Layer, pass: number) => {
       const lp = l.pal ?? pal;
@@ -805,6 +825,7 @@ export class Renderer {
       gl.uniform1i(this.mesh.u('uPass'), pass);
       gl.uniform1f(this.mesh.u('uMist'), l.mist ?? 0);
       gl.uniform2fv(this.mesh.u('uMistY'), l.mistY ?? [0, 10]);
+      gl.uniform3fv(this.mesh.u('uMistColor'), l.mistColor ?? [1, 1, 1]);
       gl.uniformMatrix4fv(this.mesh.u('uPart'), false, l.parts);
       gl.uniform4fv(this.mesh.u('uPartFx'), l.partFx);
       const md = l.model;
